@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
+  <channel>
+    <title>Podcast de test</title>
+    <itunes:image href="https://example.com/show.jpg"/>
+    <item>
+      <title>Épisode récent</title>
+      <guid>ep-3</guid>
+      <pubDate>Mon, 01 Jan 2024 12:00:00 GMT</pubDate>
+      <itunes:duration>01:02:03</itunes:duration>
+      <enclosure url="https://example.com/ep3.mp3" type="audio/mpeg" length="1000"/>
+      <description>Description épisode 3</description>
+    </item>
+    <item>
+      <title>Épisode moyen</title>
+      <guid>ep-2</guid>
+      <pubDate>Sun, 31 Dec 2023 12:00:00 GMT</pubDate>
+      <itunes:duration>12:30</itunes:duration>
+      <enclosure url="https://example.com/ep2.mp3" type="audio/mpeg" length="1000"/>
+    </item>
+    <item>
+      <title>Épisode court</title>
+      <guid>ep-1</guid>
+      <pubDate>Sat, 30 Dec 2023 12:00:00 GMT</pubDate>
+      <itunes:duration>90</itunes:duration>
+      <enclosure url="https://example.com/ep1.mp3" type="audio/mpeg" length="1000"/>
+    </item>
+    <item>
+      <title>Vidéo seule</title>
+      <guid>ep-video</guid>
+      <pubDate>Fri, 29 Dec 2023 12:00:00 GMT</pubDate>
+      <enclosure url="https://example.com/ep.mp4" type="video/mp4" length="1000"/>
+    </item>
+  </channel>
+</rss>
