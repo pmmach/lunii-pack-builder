@@ -1,0 +1,21 @@
+---
+description: Contexte général du projet Lunii Pack Builder
+alwaysApply: true
+---
+
+# Lunii Pack Builder — contexte
+
+App web locale (mono-utilisateur) qui génère des packs d'histoires pour la Fabrique à histoires Lunii à partir d'une URL de podcast, au format attendu par [Lunii Admin Web](https://lunii-admin-web.pages.dev/).
+
+Avant toute implémentation, se référer à :
+- `requirements/` pour le besoin, le périmètre et les contraintes légales
+- `plan/` pour la stack, l'architecture et la roadmap par phases
+- `specs/` pour les spécifications d'implémentation détaillées, à suivre **à la lettre** (fichiers, signatures, cas limites, critères d'acceptation) : quand une spec existe pour ce qui est demandé, l'implémenter conformément à cette spec plutôt que d'improviser une approche différente
+
+L'app est déployée à la fois en local et sur un VPS personnel via Coolify (Docker), **sans authentification** (outil ouvert) — garder ces deux contraintes en tête pour toute décision technique.
+
+Règles de comportement pour l'agent :
+- Ne jamais implémenter une fonctionnalité hors du périmètre défini dans `requirements/01-exigences-fonctionnelles.md`, hors de ce que couvre la spec en cours dans `specs/`, ou anticiper une phase/spec suivante sans validation explicite de l'utilisateur.
+- Ne jamais tenter d'extraire de l'audio depuis une plateforme protégée par DRM (Spotify, Deezer, Apple Music streaming...) — voir `requirements/03-contraintes-legales-et-risques.md`. Pour ces plateformes, seule la résolution vers un flux RSS public équivalent est autorisée.
+- Ne jamais ajouter de système d'authentification/compte de son propre chef : la v1 est volontairement ouverte (voir `requirements/01-exigences-fonctionnelles.md`) ; seuls les garde-fous anti-abus explicitement spécifiés (rate limiting, limites de taille/durée) sont attendus.
+- Ne pas committer/pousser de code sans demande explicite de l'utilisateur.

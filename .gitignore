@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Next.js
+.next/
+out/
+build/
+dist/
+
+# Env
+.env
+.env*.local
+
+# Workspace de travail de l'app (audio/images téléchargés, packs générés)
+workspace/
+tmp/
+*.log
+
+# OS / Editeur
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Tests / coverage
+coverage/
+
+# Next generated
+next-env.d.ts

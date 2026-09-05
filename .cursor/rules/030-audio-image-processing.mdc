@@ -1,0 +1,16 @@
+---
+description: Conventions pour le traitement audio/image (ffmpeg, sharp)
+globs: lib/media/**,lib/pack/**
+alwaysApply: false
+---
+
+# Traitement audio & image
+
+- Toujours traiter les fichiers via des **streams** (ffmpeg/sharp pipelines) plutôt que de charger un fichier audio/image entier en mémoire — les épisodes de podcast peuvent faire plusieurs dizaines de Mo.
+- Toute opération ffmpeg/sharp s'exécute dans le dossier de travail de la session (`workspace/<sessionId>/...`), jamais dans un répertoire partagé/temp global non nettoyé.
+- Vérifier le type MIME réel du fichier téléchargé (pas seulement l'extension de l'URL) avant de le passer à ffmpeg/sharp.
+- Les opérations longues (téléchargement, trim, export zip) doivent exposer une progression exploitable par l'UI (callback ou tracker de job), pas un simple `await` bloquant sans retour utilisateur.
+- Formats de sortie fixes (voir `requirements/02-format-pack-lunii.md`) :
+  - Images : JPEG, 320x320, recadrage centré par défaut
+  - Audio : MP3, normalisé (ex: 44.1kHz)
+- En cas d'échec ffmpeg/sharp, remonter une erreur exploitable (code + message), jamais un pack partiellement généré silencieusement invalide.

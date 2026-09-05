@@ -1,0 +1,32 @@
+---
+description: Conventions Next.js 15 / TypeScript pour ce projet
+globs: **/*.ts,**/*.tsx
+alwaysApply: false
+---
+
+# Next.js 15 (App Router) + TypeScript
+
+- TypeScript strict partout, jamais de `any` implicite ou explicite (utiliser `unknown` + narrowing si besoin).
+- Server Components par défaut ; n'ajouter `"use client"` que pour l'interactivité réelle (formulaires, wavesurfer, previews audio/vidéo).
+- Toute mutation ou opération serveur (résolution de source, téléchargement, ffmpeg, génération de zip) passe par des **Server Actions** typées, pas par des appels API ad hoc côté client sauf nécessité (ex: streaming de progression).
+- Valider toute entrée utilisateur (URL, titres, uploads) avec **Zod** avant de l'utiliser, en particulier avant tout accès filesystem ou requête HTTP sortante.
+- Un module = une responsabilité : les adapters de source vivent dans `lib/sources/`, le traitement média dans `lib/media/`, l'assemblage de pack dans `lib/pack/` (voir `plan/01-architecture.md`).
+- Erreurs : ne jamais avaler silencieusement une erreur ; renvoyer un résultat typé (`{ ok: true, data } | { ok: false, error }`) depuis les Server Actions pour un affichage clair côté UI.
+
+```typescript
+// ❌ BAD
+async function resolveSource(url: string) {
+  try { return await fetchRss(url); } catch { return null; }
+}
+
+// ✅ GOOD
+async function resolveSource(url: string): Promise<Result<SourceResolution>> {
+  const parsed = urlSchema.safeParse(url);
+  if (!parsed.success) return { ok: false, error: "URL invalide" };
+  try {
+    return { ok: true, data: await fetchRss(parsed.data) };
+  } catch (e) {
+    return { ok: false, error: "Impossible de lire le flux RSS" };
+  }
+}
+```

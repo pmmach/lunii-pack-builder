@@ -1,0 +1,16 @@
+---
+description: Sécurité, validation des entrées et respect des contraintes légales
+alwaysApply: true
+---
+
+# Sécurité & légal
+
+Cette app fait deux choses sensibles par nature : elle **récupère des URL fournies par l'utilisateur** et elle **écrit des fichiers sur le disque**. Traiter chaque entrée comme non fiable.
+
+- **Anti-SSRF** : avant tout `fetch` d'une URL utilisateur, valider le schéma (`http`/`https` uniquement), résoudre l'hôte et rejeter les IP privées/loopback/lien-local, poser un timeout et une limite de taille de réponse.
+- **Filesystem** : ne jamais utiliser un titre/nom d'épisode fourni par une source externe directement comme nom de fichier/dossier — le passer dans un slugifier (retirer `..`, `/`, caractères de contrôle) avant toute écriture dans `workspace/`.
+- **Pas de secrets en dur** : toute clé d'API (ex: PodcastIndex) va dans `.env.local` (jamais commité), lu via `process.env`.
+- **Sources DRM interdites** : ne jamais implémenter d'extraction audio pour Spotify/Deezer/Apple Music streaming. Pour ces URLs, uniquement résoudre le flux RSS public équivalent par nom d'émission (voir `requirements/03-contraintes-legales-et-risques.md`). En cas de doute sur une nouvelle source, demander confirmation avant d'implémenter.
+- **Nettoyage** : tout fichier temporaire créé dans `workspace/<sessionId>/` doit être supprimable de façon fiable (try/finally ou tâche de nettoyage), pour éviter l'accumulation de contenu téléchargé sur le disque de l'utilisateur.
+- Ne jamais logger une URL complète pouvant contenir un token/clé (query params sensibles) en clair dans la console/logs.
+- **Outil ouvert sans authentification** (déployé publiquement sur un VPS) : toute Server Action déclenchant un traitement lourd (résolution de source, export de pack) doit passer par le rate limiting et les limites de taille/durée/concurrence définis dans `specs/05-deploiement-coolify.md` — ce sont des garde-fous anti-abus, pas une authentification, ne pas les confondre ni les présenter comme tels à l'utilisateur.

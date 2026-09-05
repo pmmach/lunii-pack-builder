@@ -1,0 +1,11 @@
+---
+description: Workflow git pour ce projet
+alwaysApply: true
+---
+
+# Workflow git
+
+- Ne jamais créer de commit ou push sans demande explicite de l'utilisateur, même après une modification substantielle.
+- Quand un commit est demandé : messages concis, en français, au présent, expliquant le "pourquoi" (ex: `Ajoute la résolution de flux RSS pour les pages podcast génériques`).
+- Ne jamais committer `workspace/`, `.env*`, `node_modules/` ou tout fichier listé dans `.gitignore`.
+- Un commit = un changement cohérent (éviter de mélanger cadrage/doc et code applicatif dans le même commit une fois le développement démarré).

@@ -1,0 +1,15 @@
+---
+description: UI/UX — Tailwind, shadcn/ui et skills de design disponibles
+globs: **/*.tsx
+alwaysApply: false
+---
+
+# UI / UX
+
+- Styling exclusivement via **Tailwind CSS** et composants **shadcn/ui** (pas de CSS-in-JS ni de librairie de composants concurrente).
+- Interface simple et rassurante pour un usage familial : formulaire d'URL clair, retour de progression visible sur les traitements longs (téléchargement/conversion), messages d'erreur compréhensibles (pas de stack trace brute).
+- Pour toute nouvelle vue ou composant significatif (page d'atelier de pack, éditeur de trim audio, aperçu de pack), lire et appliquer les skills de design disponibles avant de coder :
+  - `ui-ux-pro-max` (styles, palettes, guidelines UX) — `C:\Users\minh\.cursor\skills\ui-ux-pro-max\SKILL.md`
+  - `ui-styling` (shadcn/ui + Tailwind, accessibilité, dark mode) — `C:\Users\minh\.cursor\skills\ui-styling\SKILL.md`
+- Accessibilité de base : labels de formulaire explicites, focus visible, contrastes suffisants, feedback clavier sur les contrôles de l'éditeur audio.
+- Images servies via `next/image` avec dimensions explicites (les vignettes de pack sont carrées 320x320, l'aperçu peut être affiché plus grand mais toujours en respectant le ratio).
