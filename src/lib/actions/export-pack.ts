@@ -4,11 +4,17 @@ import path from "node:path";
 import { writePackToDisk } from "@/lib/pack/write-to-disk";
 import { zipPackDirectory } from "@/lib/pack/zip";
 import type { PackDraft } from "@/lib/pack/types";
+import { getClientIp } from "@/lib/shared/client-ip";
+import { checkRateLimit } from "@/lib/shared/rate-limit";
 import { err, ok, type Result } from "@/lib/shared/result";
 
 export async function exportPackAction(
   pack: PackDraft
 ): Promise<Result<{ downloadUrl: string; sizeBytes: number }>> {
+  const ip = await getClientIp();
+  const limited = checkRateLimit(ip, "export");
+  if (!limited.ok) return limited;
+
   if (!pack.sessionId) {
     return err("Session invalide", "INVALID_SESSION");
   }
@@ -23,7 +29,6 @@ export async function exportPackAction(
   const zipped = await zipPackDirectory(written.data.packDir, zipPath);
   if (!zipped.ok) return zipped;
 
-  // Mémoriser le slug pour le Content-Disposition
   const packSlug = path.basename(written.data.packDir);
   const metaPath = path.join(workspaceDir, "export-meta.json");
   const { writeFile } = await import("node:fs/promises");
