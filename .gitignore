@@ -14,7 +14,7 @@ dist/
 .env*.local
 
 # Workspace de travail de l'app (audio/images téléchargés, packs générés)
-workspace/
+/workspace/
 tmp/
 *.log
 
