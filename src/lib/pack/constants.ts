@@ -1,0 +1,1 @@
+export const DEFAULT_TITLE_CLIP_SECONDS = 8;

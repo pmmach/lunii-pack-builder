@@ -15,7 +15,7 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@ffprobe-installer/ffprobe": "^2.1.2",
-    "archiver": "^8.0.0",
+    "archiver": "^7.0.1",
     "cheerio": "^1.2.0",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.2.5",
