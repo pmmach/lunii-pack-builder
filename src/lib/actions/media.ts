@@ -107,23 +107,32 @@ export async function prepareEpisodeAction(
       }
 
       const coverOut = path.join(processedDir, "cover.jpg");
+      updateJob(jobId, {
+        progress: 55,
+        message: "Recadrage de la vignette…",
+      });
       if (coverSourcePath) {
-        updateJob(jobId, {
-          progress: 55,
-          message: "Recadrage de la vignette…",
-        });
         const cropped = await cropImageToSquare({
           sourcePath: coverSourcePath,
           outputPath: coverOut,
         });
         if (!cropped.ok) {
-          updateJob(jobId, {
-            status: "error",
-            message: cropped.error,
-            errorCode: cropped.code,
-          });
-          return;
+          coverSourcePath = undefined;
         }
+      }
+      if (!coverSourcePath) {
+        // Vignette de secours uni-couleur si aucune image source
+        const sharp = (await import("sharp")).default;
+        await sharp({
+          create: {
+            width: 320,
+            height: 320,
+            channels: 3,
+            background: { r: 13, g: 148, b: 136 },
+          },
+        })
+          .jpeg({ quality: 85 })
+          .toFile(coverOut);
       }
 
       updateJob(jobId, {
@@ -173,7 +182,7 @@ export async function prepareEpisodeAction(
           episodeId: safeEpisodeId,
           audioPath,
           storyPath: finalStory,
-          coverPath: coverSourcePath ? coverOut : undefined,
+          coverPath: coverOut,
           peaks: peaks.data,
         }),
       });

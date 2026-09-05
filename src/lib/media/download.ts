@@ -46,8 +46,13 @@ export async function downloadToWorkspace(
       (kind === "audio" &&
         (mimeType === "application/octet-stream" ||
           mimeType === "application/mp4" ||
+          mimeType === "audio/mp4" ||
+          mimeType === "audio/x-m4a" ||
           mimeType === "")) ||
-      (kind === "image" && mimeType === "application/octet-stream");
+      (kind === "image" &&
+        (mimeType === "application/octet-stream" ||
+          mimeType === "image/webp" ||
+          mimeType === ""));
 
     if (!mimeOk) {
       return err(

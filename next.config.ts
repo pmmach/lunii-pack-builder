@@ -3,8 +3,19 @@ import path from "node:path";
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  // Évite que Next.js prenne un package-lock.json parent (ex. C:\Users\minh) comme racine
   outputFileTracingRoot: path.join(__dirname),
+  images: {
+    remotePatterns: [
+      { protocol: "https", hostname: "**" },
+      { protocol: "http", hostname: "**" },
+    ],
+  },
+  serverExternalPackages: [
+    "fluent-ffmpeg",
+    "@ffmpeg-installer/ffmpeg",
+    "@ffprobe-installer/ffprobe",
+    "sharp",
+  ],
 };
 
 export default nextConfig;
