@@ -1,12 +1,9 @@
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { load as yamlLoad } from "js-yaml";
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  addStoryToPack,
-  createPackDraft,
-} from "./builder";
+import { addStoryToPack, createPackDraft } from "./builder";
+import type { StudioPack } from "./studio-format";
 import { writePackToDisk } from "./write-to-disk";
 
 const audio = path.join(
@@ -31,10 +28,11 @@ afterEach(async () => {
 });
 
 describe("writePackToDisk", () => {
-  it("écrit l'arborescence Lunii Admin Web attendue", async () => {
+  it("écrit le format STUdio final (story.json + assets/) pour un pack à 1 histoire", async () => {
     tmpDir = await mkdtemp(path.join(os.tmpdir(), "lunii-pack-"));
     let pack = createPackDraft("sess", {
       title: "Pack Test",
+      author: "Auteur Test",
       description: "Desc",
     });
     pack = addStoryToPack(pack, {
@@ -52,26 +50,107 @@ describe("writePackToDisk", () => {
     expect(path.basename(packDir)).toBe("pack-test");
 
     const rootFiles = await readdir(packDir);
-    expect(rootFiles).toContain("cover.jpeg");
-    expect(rootFiles).toContain("md.yaml");
-    expect(rootFiles).toContain("premiere-histoire");
+    expect(rootFiles.sort()).toEqual(["assets", "story.json"]);
 
-    const md = yamlLoad(
-      await readFile(path.join(packDir, "md.yaml"), "utf-8")
-    ) as { title: string; description: string; uuid: string };
-    expect(md.title).toBe("Pack Test");
-    expect(md.description).toBe("Desc");
-    expect(md.uuid).toBe(pack.uuid);
+    const assetFiles = await readdir(path.join(packDir, "assets"));
+    // cover + intro (générée par défaut) + story = 3 fichiers
+    expect(assetFiles).toHaveLength(3);
 
-    const storyFiles = await readdir(path.join(packDir, "premiere-histoire"));
-    expect(storyFiles.sort()).toEqual(
-      ["cover.jpeg", "story.mp3", "title.mp3"].sort()
+    const studioPack = JSON.parse(
+      await readFile(path.join(packDir, "story.json"), "utf-8")
+    ) as StudioPack;
+
+    expect(studioPack.format).toBe("v1");
+    expect(studioPack.version).toBe(2);
+    expect(studioPack.uuid).toBe(pack.uuid);
+    expect(studioPack.title).toBe("Pack Test");
+    expect(studioPack.author).toBe("Auteur Test");
+    expect(studioPack.description).toBe("Desc");
+
+    expect(studioPack.stageNodes).toHaveLength(2);
+    const cover_ = studioPack.stageNodes.find((n) => n.type === "cover");
+    const story = studioPack.stageNodes.find((n) => n.type === "story");
+    expect(cover_?.uuid).toBe(pack.uuid);
+    expect(cover_?.squareOne).toBe(true);
+    expect(cover_?.image).toBeTruthy();
+    expect(cover_?.audio).toBeTruthy();
+    expect(cover_?.homeTransition).toBeNull();
+    expect(story?.image).toBeNull();
+    expect(story?.audio).toBeTruthy();
+    expect(story?.okTransition).toBeNull();
+
+    expect(studioPack.actionNodes).toHaveLength(1);
+    expect(studioPack.actionNodes[0]?.options).toEqual([story?.uuid]);
+    expect(cover_?.okTransition?.actionNode).toBe(studioPack.actionNodes[0]?.id);
+
+    // tous les fichiers référencés dans story.json existent bien dans assets/
+    for (const node of studioPack.stageNodes) {
+      if (node.image) expect(assetFiles).toContain(node.image);
+      if (node.audio) expect(assetFiles).toContain(node.audio);
+    }
+  }, 30_000);
+
+  it("écrit un graphe menu/story par histoire pour un pack multi-histoires", async () => {
+    tmpDir = await mkdtemp(path.join(os.tmpdir(), "lunii-pack-"));
+    let pack = createPackDraft("sess", {
+      title: "Pack Multi",
+      author: "Auteur Test",
+      description: "Desc",
+    });
+    pack = addStoryToPack(pack, {
+      id: "1",
+      title: "Histoire 1",
+      storyAudioPath: audio,
+      coverImagePath: cover,
+    });
+    pack = addStoryToPack(pack, {
+      id: "2",
+      title: "Histoire 2",
+      storyAudioPath: audio,
+      coverImagePath: cover,
+    });
+
+    const result = await writePackToDisk(pack, tmpDir);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const studioPack = JSON.parse(
+      await readFile(path.join(result.data.packDir, "story.json"), "utf-8")
+    ) as StudioPack;
+
+    // cover racine + (menu + story) par histoire = 1 + 2*2 = 5
+    expect(studioPack.stageNodes).toHaveLength(5);
+    // action racine + une action par histoire = 1 + 2 = 3
+    expect(studioPack.actionNodes).toHaveLength(3);
+
+    const rootCover = studioPack.stageNodes.find((n) => n.type === "cover");
+    expect(rootCover?.uuid).toBe(pack.uuid);
+    const rootAction = studioPack.actionNodes.find(
+      (a) => a.id === rootCover?.okTransition?.actionNode
     );
+    expect(rootAction?.options).toHaveLength(2);
+
+    const menus = studioPack.stageNodes.filter((n) => n.type === "menu");
+    expect(menus).toHaveLength(2);
+    for (const menu of menus) {
+      expect(menu.image).toBeTruthy();
+      expect(menu.homeTransition).toBeNull();
+    }
+
+    const stories = studioPack.stageNodes.filter((n) => n.type === "story");
+    expect(stories).toHaveLength(2);
+    stories.forEach((story, index) => {
+      expect(story.image).toBeNull();
+      expect(story.homeTransition).toEqual({
+        actionNode: rootAction?.id,
+        optionIndex: index,
+      });
+    });
   }, 30_000);
 
   it("gère les collisions de noms de dossiers", async () => {
     tmpDir = await mkdtemp(path.join(os.tmpdir(), "lunii-pack-"));
-    let pack1 = createPackDraft("s1", { title: "Même Titre" });
+    let pack1 = createPackDraft("s1", { title: "Même Titre", author: "A" });
     pack1 = addStoryToPack(pack1, {
       id: "1",
       title: "H",
@@ -81,7 +160,7 @@ describe("writePackToDisk", () => {
     const r1 = await writePackToDisk(pack1, tmpDir);
     expect(r1.ok).toBe(true);
 
-    let pack2 = createPackDraft("s2", { title: "Même Titre" });
+    let pack2 = createPackDraft("s2", { title: "Même Titre", author: "A" });
     pack2 = addStoryToPack(pack2, {
       id: "2",
       title: "H",

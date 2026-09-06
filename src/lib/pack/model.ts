@@ -3,12 +3,13 @@ import type { PackDraft, StoryDraft } from "./types";
 
 export function createPackDraft(
   sessionId: string,
-  meta: { title: string; description?: string }
+  meta: { title: string; author?: string; description?: string }
 ): PackDraft {
   return {
     sessionId,
     uuid: uuidv4(),
     title: meta.title,
+    author: meta.author ?? "",
     description: meta.description,
     coverImagePath: "",
     stories: [],

@@ -20,6 +20,7 @@ export interface SessionState {
   selectedEpisodeIds: string[];
   stories: PreparedStory[];
   packTitle: string;
+  packAuthor: string;
   packDescription: string;
   step: WorkshopStep;
   downloadUrl?: string;

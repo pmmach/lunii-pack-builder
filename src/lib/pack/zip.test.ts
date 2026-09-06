@@ -31,12 +31,12 @@ function listZipEntries(zipPath: string): Promise<string[]> {
 }
 
 describe("zipPackDirectory", () => {
-  it("zippe avec le slug à la racine (pas de dossier parent superflu)", async () => {
+  it("zippe le contenu à la racine, sans dossier parent (attendu par Lunii Admin Builder)", async () => {
     tmpDir = await mkdtemp(path.join(os.tmpdir(), "lunii-zip-"));
     const packDir = path.join(tmpDir, "mon-pack");
-    await mkdir(path.join(packDir, "histoire"), { recursive: true });
-    await writeFile(path.join(packDir, "md.yaml"), "title: x\n");
-    await writeFile(path.join(packDir, "histoire", "story.mp3"), "fake");
+    await mkdir(path.join(packDir, "assets"), { recursive: true });
+    await writeFile(path.join(packDir, "story.json"), "{}");
+    await writeFile(path.join(packDir, "assets", "abc123.mp3"), "fake");
 
     const zipPath = path.join(tmpDir, "out.zip");
     const result = await zipPackDirectory(packDir, zipPath);
@@ -44,8 +44,8 @@ describe("zipPackDirectory", () => {
     if (!result.ok) return;
 
     const entries = await listZipEntries(zipPath);
-    expect(entries.some((e) => e.startsWith("mon-pack/"))).toBe(true);
-    expect(entries.some((e) => e.includes("md.yaml"))).toBe(true);
-    expect(entries.every((e) => !e.startsWith("tmp"))).toBe(true);
+    expect(entries).toContain("story.json");
+    expect(entries).toContain("assets/abc123.mp3");
+    expect(entries.some((e) => e.startsWith("mon-pack/"))).toBe(false);
   });
 });

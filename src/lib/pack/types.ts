@@ -11,6 +11,7 @@ export interface PackDraft {
   sessionId: string;
   uuid: string;
   title: string;
+  author: string;
   description?: string;
   coverImagePath: string;
   titleAudioPath?: string;

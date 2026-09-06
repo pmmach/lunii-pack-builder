@@ -62,6 +62,7 @@ export default function HomePage() {
             : [],
         stories: [],
         packTitle: source.showTitle,
+        packAuthor: source.showAuthor ?? "",
         packDescription: "",
         step,
       });

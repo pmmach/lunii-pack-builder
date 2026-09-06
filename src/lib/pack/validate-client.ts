@@ -7,6 +7,9 @@ export function validatePackDraftClient(pack: PackDraft): Result<true> {
   if (!pack.title.trim()) {
     return err("Le titre du pack est obligatoire", "INVALID_PACK");
   }
+  if (!pack.author.trim()) {
+    return err("L'auteur du pack est obligatoire", "INVALID_PACK");
+  }
   if (pack.stories.length < 1) {
     return err("Le pack doit contenir au moins une histoire", "INVALID_PACK");
   }

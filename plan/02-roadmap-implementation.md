@@ -33,8 +33,8 @@ Depuis le cadrage, chaque phase ci-dessous est détaillée en spec d'implémenta
 ## Phase 3 — Pipeline média + pack simple (histoire unique)
 
 - Téléchargement audio, trim ffmpeg, recadrage image sharp, génération de waveform, suivi de progression
-- `lib/pack/builder.ts` + `zip.ts` : génération de l'arborescence + `md.yaml` + export `.zip`
-- Test end-to-end manuel : import du zip généré dans Lunii Admin Web → vérifier que "create pack" fonctionne et que le pack s'installe sur l'appareil
+- `lib/pack/builder.ts` + `studio-format.ts` + `zip.ts` : génération directe du format STUdio final (`story.json` + `assets/`, cf. `requirements/02-format-pack-lunii.md`) + export `.zip`
+- Test end-to-end manuel : import du zip généré dans [Lunii Admin Builder](https://lunii-admin-builder.pages.dev/) → vérifier que l'import fonctionne et que le pack s'installe sur l'appareil
 
 ## Phase 4 — Parcours UI complet (édition audio visuelle + multi-histoires)
 
@@ -50,6 +50,6 @@ Depuis le cadrage, chaque phase ci-dessous est détaillée en spec d'implémenta
 
 ## Phase 6 — Stretch goals (optionnel, à discuter)
 
-- Génération directe du pack STUdio final (bypass de l'étape manuelle dans Lunii Admin Web)
+- ~~Génération directe du pack STUdio final~~ — fait dès la phase 3 (05/09/2026), après analyse d'un pack réel et du code source de [olup/lunii-admin-builder](https://github.com/olup/lunii-admin-builder). L'étape manuelle restante (import dans Lunii Admin Builder/Web pour écrire sur l'appareil via USB) est incompressible : notre app serveur n'a pas d'accès WebUSB au device.
 - Normalisation de volume audio automatique
 - Persistance légère (SQLite) pour retrouver ses packs entre sessions

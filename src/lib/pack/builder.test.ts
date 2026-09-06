@@ -25,7 +25,10 @@ const cover = path.join(
 
 describe("pack builder", () => {
   it("ajoute, réordonne et retire des histoires", () => {
-    let pack = createPackDraft("sess-1", { title: "Mon pack" });
+    let pack = createPackDraft("sess-1", {
+      title: "Mon pack",
+      author: "Auteur",
+    });
     pack = addStoryToPack(pack, {
       id: "a",
       title: "Histoire A",
@@ -52,10 +55,13 @@ describe("pack builder", () => {
   });
 
   it("valide les cas d'invalidité", () => {
-    const emptyTitle = createPackDraft("s", { title: "  " });
+    const emptyTitle = createPackDraft("s", { title: "  ", author: "Auteur" });
     expect(validatePackDraft(emptyTitle).ok).toBe(false);
 
-    let pack = createPackDraft("s", { title: "OK" });
+    const emptyAuthor = createPackDraft("s", { title: "OK", author: "  " });
+    expect(validatePackDraft(emptyAuthor).ok).toBe(false);
+
+    let pack = createPackDraft("s", { title: "OK", author: "Auteur" });
     expect(validatePackDraft(pack).ok).toBe(false);
 
     pack = addStoryToPack(pack, {
@@ -66,7 +72,7 @@ describe("pack builder", () => {
     });
     expect(validatePackDraft(pack).ok).toBe(false);
 
-    pack = createPackDraft("s", { title: "OK" });
+    pack = createPackDraft("s", { title: "OK", author: "Auteur" });
     pack = addStoryToPack(pack, {
       id: "a",
       title: "H",

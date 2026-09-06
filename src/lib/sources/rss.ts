@@ -94,7 +94,9 @@ function extractImage(
 type ParsedFeed = {
   title?: string;
   image?: { url?: string };
-  itunes?: { image?: string };
+  itunes?: { image?: string; author?: string };
+  managingEditor?: string;
+  creator?: string;
   items?: FeedItem[];
 };
 
@@ -106,6 +108,11 @@ export function buildEpisodesFromFeed(
     feed.image?.url ||
     (feed as { itunes?: { image?: string } }).itunes?.image ||
     undefined;
+
+  const feedAuthor = truncate(
+    feed.itunes?.author || feed.managingEditor || feed.creator,
+    200
+  );
 
   const episodes: EpisodeMeta[] = [];
 
@@ -151,6 +158,7 @@ export function buildEpisodesFromFeed(
   return ok({
     kind: "show",
     showTitle: feed.title?.trim() || "Podcast",
+    showAuthor: feedAuthor,
     showImageUrl: feedImage,
     feedUrl,
     episodes: limited,

@@ -372,6 +372,7 @@ export default function PackWorkshopPage() {
     try {
       let pack: PackDraft = createPackDraft(sessionId, {
         title: state.packTitle,
+        author: state.packAuthor,
         description: state.packDescription,
       });
       for (const s of state.stories) {
@@ -674,6 +675,17 @@ export default function PackWorkshopPage() {
               />
             </div>
             <div className="space-y-2">
+              <Label htmlFor="pack-author">Auteur</Label>
+              <Input
+                id="pack-author"
+                className="min-h-11"
+                value={state.packAuthor}
+                onChange={(e) =>
+                  persist({ ...state, packAuthor: e.target.value })
+                }
+              />
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="pack-desc">Description</Label>
               <Textarea
                 id="pack-desc"
@@ -725,7 +737,10 @@ export default function PackWorkshopPage() {
             <Button
               className="bg-accent text-accent-foreground hover:bg-accent/90 min-h-11"
               disabled={
-                busy || !state.packTitle.trim() || state.stories.length === 0
+                busy ||
+                !state.packTitle.trim() ||
+                !state.packAuthor.trim() ||
+                state.stories.length === 0
               }
               onClick={() => void doExport()}
             >

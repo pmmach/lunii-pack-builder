@@ -11,6 +11,7 @@ export interface EpisodeMeta {
 export interface SourceResolution {
   kind: "episode" | "show";
   showTitle: string;
+  showAuthor?: string;
   showImageUrl?: string;
   feedUrl: string;
   resolvedFrom?: "direct" | "page-discovery" | "directory-search";
