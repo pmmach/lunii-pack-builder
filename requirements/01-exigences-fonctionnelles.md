@@ -9,8 +9,8 @@ Avant de figer les exigences, quelques points du besoin initial ont été challe
    → **Décision** : l'app se branche sur les flux RSS publics. Quand l'utilisateur colle une URL Spotify (ou Apple Podcasts, Deezer...), l'app tente de **retrouver le flux RSS équivalent** via le nom de l'émission (API de recherche type iTunes Search / PodcastIndex), plutôt que de scraper Spotify. Voir `03-contraintes-legales-et-risques.md`.
 
 2. **"Générer un dossier compatible avec Lunii Admin Web"**
-   Reproduire nous-mêmes le format binaire final (`.pack`) ou le format d'édition STUdio (`story.json` + graphe de nœuds) serait complexe et redondant : **Lunii Admin Web intègre déjà** un créateur de pack (issu de [lunii-admin](https://github.com/olup/lunii-admin)) qui convertit une **arborescence de dossiers simple** en pack STUdio installable. Réinventer cette conversion n'apporterait aucune valeur et ajouterait un risque de rupture de compatibilité.
-   → **Décision (MVP)** : l'app génère exactement l'arborescence attendue par ce créateur de pack (voir `02-format-pack-lunii.md`), livrée en `.zip` prête à être glissée dans Lunii Admin Web via son bouton "create pack". Une évolution future pourra viser la génération directe du pack STUdio final (voir roadmap).
+   Le format installable sur l'appareil est le pack STUdio (`story.json` + `assets/` dans un `.zip`). Après analyse d'un pack réel et du code source de [olup/lunii-admin-builder](https://github.com/olup/lunii-admin-builder), **notre application génère directement ce format final** (voir `02-format-pack-lunii.md`).
+   → **Décision (v1)** : export d'un `.zip` STUdio prêt à être **importé** dans [Lunii Admin Builder](https://lunii-admin-builder.pages.dev/) ou [Lunii Admin Web](https://lunii-admin-web.pages.dev/) pour installation USB sur l'appareil. L'étape manuelle restante (écriture sur le device) est incompressible côté serveur (pas d'accès WebUSB). On ne génère pas le format binaire chiffré/signé interne de la Lunii.
 
 3. **"Une intro + une histoire par pack"**
    Le besoin réel derrière "intro" est probablement : un fichier joué à la sélection de l'histoire dans le menu (`title.mp3`) et le contenu de l'histoire elle-même (`story.mp3`). Ce vocabulaire correspond exactement à la structure attendue par Lunii Admin Web — pas besoin d'un concept supplémentaire.
@@ -32,18 +32,21 @@ Avant de figer les exigences, quelques points du besoin initial ont été challe
 - **Récupération des métadonnées** par épisode : titre, description, image de couverture, durée, URL audio
 - **Téléchargement de l'audio** depuis l'URL `enclosure` du flux RSS
 - **Édition audio minimale** : lecture avec forme d'onde, sélection d'un point de début et de fin (trim), aperçu avant validation
-- **Gestion de l'image** : récupération auto de la couverture (épisode ou émission), recadrage/redimensionnement automatique aux formats requis (320x320 / cover jpeg), possibilité de recadrer manuellement ou d'importer sa propre image
-- **Métadonnées du pack** : titre du pack, titre par histoire, génération automatique d'un UUID, édition manuelle possible
+- **Gestion de l'image** :
+  - image principale du pack : couverture de l'émission (ou de l'épisode unique)
+  - image par histoire : vignette spécifique à l'épisode quand disponible (balise `itunes:image` du flux, sinon enrichissement depuis la page HTML d'origine si celle-ci liste les épisodes avec une image propre — ex. pages podcasts Radio France) ; sinon fallback sur l'image de l'émission
+  - recadrage/redimensionnement automatique aux formats requis (320x320 / cover jpeg), possibilité de recadrer manuellement ou d'importer sa propre image
+- **Métadonnées du pack** : titre, **auteur** (obligatoire, auto-rempli depuis le flux RSS, éditable), description, titre par histoire, génération automatique d'un UUID
 - **Pack multi-histoires** : ajouter/retirer/réordonner plusieurs histoires dans un même pack avant export
-- **Export** : génération d'un `.zip` respectant l'arborescence Lunii Admin Web, téléchargeable depuis le navigateur
+- **Export** : génération d'un `.zip` au format STUdio final (`story.json` + `assets/` à la racine), téléchargeable depuis le navigateur, importable dans Lunii Admin Builder / Web
 
 ### Ne doit pas faire (hors périmètre v1)
 
 - Extraction audio depuis Spotify/plateformes avec DRM
-- Génération directe du pack STUdio final signé/chiffré (on s'arrête à l'étape juste avant, prise en charge par Lunii Admin Web)
+- Génération du format binaire chiffré/signé interne de la Lunii, ni écriture directe sur l'appareil (USB) — on s'arrête au zip STUdio importable
 - Support vidéo
 - Transcription / sous-titrage / découpage automatique par IA du contenu
-- Comptes utilisateurs, multi-utilisateurs, déploiement cloud public
+- Comptes utilisateurs, multi-utilisateurs, authentification
 - Application mobile
 
 ## Exigences non-fonctionnelles

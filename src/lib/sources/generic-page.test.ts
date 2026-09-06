@@ -20,6 +20,10 @@ const feedXml = readFileSync(
   path.join(__dirname, "__fixtures__", "sample-feed.xml"),
   "utf-8"
 );
+const episodeCardsPage = readFileSync(
+  path.join(__dirname, "__fixtures__", "sample-page-episode-cards.html"),
+  "utf-8"
+);
 
 afterEach(() => {
   setDnsLookupForTests(null);
@@ -76,5 +80,43 @@ describe("resolveFromHtmlBody", () => {
     if (!result.ok) return;
     expect(result.data.resolvedFrom).toBe("page-discovery");
     expect(result.data.episodes.length).toBeGreaterThan(0);
+  });
+
+  it("associe une image par épisode trouvée sur la page quand le flux RSS n'a qu'une image générique", async () => {
+    setDnsLookupForTests(
+      (async () => [{ address: "93.184.216.34", family: 4 }]) as never
+    );
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        return new Response(feedXml, {
+          status: 200,
+          headers: { "content-type": "application/rss+xml" },
+        });
+      })
+    );
+
+    const result = await resolveFromHtmlBody(
+      episodeCardsPage,
+      "https://example.com/show"
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const recent = result.data.episodes.find(
+      (e) => e.title === "Épisode récent"
+    );
+    const moyen = result.data.episodes.find(
+      (e) => e.title === "Épisode moyen"
+    );
+    const court = result.data.episodes.find(
+      (e) => e.title === "Épisode court"
+    );
+
+    expect(recent?.imageUrl).toBe("https://example.com/images/episode-recent.jpg");
+    expect(moyen?.imageUrl).toBe("https://example.com/images/episode-moyen.jpg");
+    // Pas de carte correspondante sur la page pour cet épisode : fallback sur l'image du flux
+    expect(court?.imageUrl).toBe("https://example.com/show.jpg");
   });
 });

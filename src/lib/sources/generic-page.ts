@@ -1,6 +1,7 @@
 import * as cheerio from "cheerio";
 import { createHash } from "node:crypto";
 import { err, ok, type Result } from "@/lib/shared/result";
+import { enrichEpisodeImagesFromPage } from "./page-images";
 import { parseRssFromXml } from "./rss";
 import type { SourceResolution } from "./types";
 import { readResponseText, safeFetch } from "./url-guard";
@@ -148,7 +149,17 @@ export async function resolveFromHtmlBody(
     if (!feedFetched.ok) return feedFetched;
     const xml = await readResponseText(feedFetched.data);
     if (!xml.ok) return xml;
-    return parseRssFromXml(xml.data, rssHref, "page-discovery");
+    const parsed = await parseRssFromXml(xml.data, rssHref, "page-discovery");
+    if (!parsed.ok) return parsed;
+    // Le flux RSS ne fournit souvent qu'une image générique par item (celle
+    // du podcast) : on tente de retrouver une vignette propre à chaque
+    // épisode directement sur la page HTML d'origine (ex : Radio France).
+    const episodes = enrichEpisodeImagesFromPage(
+      $,
+      pageUrl,
+      parsed.data.episodes
+    );
+    return ok({ ...parsed.data, episodes });
   }
 
   // Fallback JSON-LD / OG without RSS

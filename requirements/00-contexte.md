@@ -17,12 +17,13 @@ Une application web simple permettant de :
 - Saisir l'URL d'une page de podcast (épisode unique ou émission avec plusieurs épisodes), par exemple :
   - France Inter / Radio France : `https://www.radiofrance.fr/franceinter/podcasts/bestioles/l-anemone-de-mer-bouche-a-tout-faire-2591691`
   - Spotify : `https://open.spotify.com/show/2kRvsf2hPuQFVPax4jE4WT`
-- Générer automatiquement un dossier compatible avec [Lunii Admin Web](https://lunii-admin-web.pages.dev/), contenant a minima :
-  - un titre
-  - une image vignette
+- Générer automatiquement un pack STUdio (`.zip` avec `story.json` + `assets/`) compatible avec [Lunii Admin Builder](https://lunii-admin-builder.pages.dev/) / [Lunii Admin Web](https://lunii-admin-web.pages.dev/), contenant a minima :
+  - un titre, un auteur, une description
+  - une image vignette (pack) et, si possible, une vignette propre à chaque histoire
   - une intro en `.mp3`
   - l'histoire en `.mp3`
-- Gérer des packs contenant plusieurs histoires (plusieurs épisodes d'une même émission dans un seul pack Lunii)
+- Gérer des packs contenant plusieurs histoires (plusieurs épisodes d'une même émission dans un seul pack Lunii), en associant à chaque histoire son image lorsqu'elle est disponible sur la source
+- L'étape manuelle restante : importer le `.zip` dans Lunii Admin Builder/Web pour l'installer sur l'appareil via USB
 
 ## Ce que ce document ne couvre pas
 
