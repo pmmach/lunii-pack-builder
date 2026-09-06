@@ -149,31 +149,8 @@ export async function prepareEpisodeAction(
         return;
       }
 
-      // Par défaut : copie "trim" complète vers story.mp3 (plage 0 → durée)
-      // L'UI appellera trimEpisodeAction pour affiner.
-      updateJob(jobId, {
-        progress: 85,
-        message: "Normalisation audio…",
-      });
-      const storyPath = path.join(processedDir, "story.mp3");
-      // Utiliser trim 0 → très grand pour forcer le réencodage mp3
-      // (si durée inconnue, on lit via un trim large — fallback 3600s)
-      const end =
-        episode.durationSeconds && episode.durationSeconds > 0
-          ? episode.durationSeconds
-          : env.MAX_EPISODE_DURATION_SECONDS;
-      const trimmed = await trimAudio(audioPath, storyPath, {
-        startSeconds: 0,
-        endSeconds: Math.max(0.1, end),
-      });
-      // Si le trim échoue (durée trop longue vs fichier), on retente avec 2s min
-      let finalStory = storyPath;
-      if (!trimmed.ok) {
-        // Garder l'audio source tel quel n'est pas idéal (format) —
-        // on marque quand même done avec le source path
-        finalStory = audioPath;
-      }
-
+      // Pas de ré-encodage ici : story.mp3 est produit plus tard via trimEpisodeAction.
+      // storyPath pointe temporairement sur la source (fallback UI uniquement).
       updateJob(jobId, {
         status: "done",
         progress: 100,
@@ -181,7 +158,7 @@ export async function prepareEpisodeAction(
         resultRef: JSON.stringify({
           episodeId: safeEpisodeId,
           audioPath,
-          storyPath: finalStory,
+          storyPath: audioPath,
           coverPath: coverOut,
           peaks: peaks.data,
         }),
@@ -211,85 +188,38 @@ export async function trimEpisodeAction(
   sessionId: string,
   episodeId: string,
   opts: TrimOptions
-): Promise<Result<{ jobId: string }>> {
-  const jobId = createJob();
-  updateJob(jobId, {
-    status: "running",
-    message: "Découpe audio…",
-    progress: 5,
-  });
+): Promise<Result<{ storyPath: string; durationSeconds: number }>> {
+  return withConcurrencyLimit(async () => {
+    const safeEpisodeId = slugify(episodeId) || "episode";
+    const sourceDir = path.join(
+      workspaceRoot(sessionId),
+      "source",
+      safeEpisodeId
+    );
+    const processedDir = path.join(
+      workspaceRoot(sessionId),
+      "processed",
+      safeEpisodeId
+    );
+    await mkdir(processedDir, { recursive: true });
 
-  void withConcurrencyLimit(async () => {
-    try {
-      const safeEpisodeId = slugify(episodeId) || "episode";
-      const sourceDir = path.join(
-        workspaceRoot(sessionId),
-        "source",
-        safeEpisodeId
-      );
-      const processedDir = path.join(
-        workspaceRoot(sessionId),
-        "processed",
-        safeEpisodeId
-      );
-      await mkdir(processedDir, { recursive: true });
-
-      // Chercher le fichier audio source
-      const { readdir } = await import("node:fs/promises");
-      const files = await readdir(sourceDir).catch(() => [] as string[]);
-      const audioFile = files.find((f) => f.startsWith("audio."));
-      if (!audioFile) {
-        updateJob(jobId, {
-          status: "error",
-          message: "Audio source introuvable",
-          errorCode: "SOURCE_MISSING",
-        });
-        return;
-      }
-
-      const inputPath = path.join(sourceDir, audioFile);
-      const outputPath = path.join(processedDir, "story.mp3");
-
-      const result = await trimAudio(
-        inputPath,
-        outputPath,
-        opts,
-        (percent) => {
-          updateJob(jobId, {
-            progress: Math.min(95, percent),
-            message: "Découpe audio…",
-          });
-        }
-      );
-
-      if (!result.ok) {
-        updateJob(jobId, {
-          status: "error",
-          message: result.error,
-          errorCode: result.code,
-        });
-        return;
-      }
-
-      updateJob(jobId, {
-        status: "done",
-        progress: 100,
-        message: "Découpe terminée",
-        resultRef: JSON.stringify({
-          storyPath: result.data.filePath,
-          durationSeconds: result.data.durationSeconds,
-        }),
-      });
-    } catch (e) {
-      updateJob(jobId, {
-        status: "error",
-        message: e instanceof Error ? e.message : "Échec de la découpe",
-        errorCode: "TRIM_FAILED",
-      });
+    const { readdir } = await import("node:fs/promises");
+    const files = await readdir(sourceDir).catch(() => [] as string[]);
+    const audioFile = files.find((f) => f.startsWith("audio."));
+    if (!audioFile) {
+      return err("Audio source introuvable", "SOURCE_MISSING");
     }
-  });
 
-  return ok({ jobId });
+    const inputPath = path.join(sourceDir, audioFile);
+    const outputPath = path.join(processedDir, "story.mp3");
+    const result = await trimAudio(inputPath, outputPath, opts);
+    if (!result.ok) return result;
+
+    return ok({
+      storyPath: result.data.filePath,
+      durationSeconds: result.data.durationSeconds,
+    });
+  });
 }
 
 export async function cropEpisodeCoverAction(

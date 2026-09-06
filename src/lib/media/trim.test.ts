@@ -29,6 +29,26 @@ describe("trimAudio", () => {
     expect(Math.abs(probed.data - 1.0)).toBeLessThan(0.2);
   });
 
+  it("copie le fichier si la plage couvre tout un MP3", async () => {
+    tmpDir = await mkdtemp(path.join(os.tmpdir(), "lunii-trim-"));
+    const out = path.join(tmpDir, "out.mp3");
+    const sourceDuration = await probeDuration(fixture);
+    expect(sourceDuration.ok).toBe(true);
+    if (!sourceDuration.ok) return;
+
+    const result = await trimAudio(fixture, out, {
+      startSeconds: 0,
+      endSeconds: sourceDuration.data,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const probed = await probeDuration(out);
+    expect(probed.ok).toBe(true);
+    if (!probed.ok) return;
+    expect(Math.abs(probed.data - sourceDuration.data)).toBeLessThan(0.05);
+  });
+
   it("rejette une plage invalide", async () => {
     tmpDir = await mkdtemp(path.join(os.tmpdir(), "lunii-trim-"));
     const out = path.join(tmpDir, "out.mp3");

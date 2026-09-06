@@ -97,9 +97,13 @@ export function randomAssetId(length = 10): string {
  *
  * - 1 seule histoire : le noeud "cover" du pack reprend directement l'image
  *   et l'intro de cette histoire (comportement observé sur un pack réel).
+ *   En fin de lecture, le noeud story revient au cover (okTransition =
+ *   homeTransition → actionNode options:[cover]), équivalent onEnd:"back".
  * - Plusieurs histoires : le noeud "cover" (racine) porte l'image/intro du
  *   pack, chaque histoire devient un noeud "menu" intermédiaire (sa propre
  *   image/intro) pointant vers son noeud "story" (le contenu audio seul).
+ *   En fin de lecture, chaque story revient au menu racine (okTransition =
+ *   homeTransition).
  */
 export function buildStudioPack(pack: PackDraft): {
   studioPack: StudioPack;
@@ -126,8 +130,17 @@ export function buildStudioPack(pack: PackDraft): {
   if (sortedStories.length === 1) {
     const [story] = sortedStories;
     if (!story) throw new Error("Histoire manquante");
-    const actionUuid = uuidv4();
+    const toStoryActionUuid = uuidv4();
+    const backToCoverActionUuid = uuidv4();
     const storyUuid = uuidv4();
+
+    // Retour au cover en fin de lecture (équivalent onEnd: "back" de
+    // lunii-admin-builder) : sans okTransition, autoplay + null fait planter
+    // certains firmwares (« erreur carte SD »).
+    const backToCover: StudioTransition = {
+      actionNode: backToCoverActionUuid,
+      optionIndex: 0,
+    };
 
     stageNodes.push({
       uuid: packUuid,
@@ -135,16 +148,16 @@ export function buildStudioPack(pack: PackDraft): {
       audio: registerOptionalAsset(story.titleAudioPath),
       type: "cover",
       name: packUuid,
-      okTransition: { actionNode: actionUuid, optionIndex: 0 },
+      okTransition: { actionNode: toStoryActionUuid, optionIndex: 0 },
       homeTransition: null,
       controlSettings: MENU_CONTROL_SETTINGS,
       squareOne: true,
     });
 
     actionNodes.push({
-      id: actionUuid,
-      uuid: actionUuid,
-      name: actionUuid,
+      id: toStoryActionUuid,
+      uuid: toStoryActionUuid,
+      name: toStoryActionUuid,
       options: [storyUuid],
     });
 
@@ -154,9 +167,16 @@ export function buildStudioPack(pack: PackDraft): {
       audio: registerAsset(story.storyAudioPath),
       type: "story",
       name: storyUuid,
-      okTransition: null,
-      homeTransition: null,
+      okTransition: backToCover,
+      homeTransition: backToCover,
       controlSettings: STORY_CONTROL_SETTINGS,
+    });
+
+    actionNodes.push({
+      id: backToCoverActionUuid,
+      uuid: backToCoverActionUuid,
+      name: backToCoverActionUuid,
+      options: [packUuid],
     });
   } else {
     const rootActionUuid = uuidv4();
@@ -180,6 +200,13 @@ export function buildStudioPack(pack: PackDraft): {
       const menuActionUuid = uuidv4();
       const leafUuid = uuidv4();
       rootOptions.push(menuUuid);
+
+      // Retour au menu racine (onEnd: "back") : okTransition = homeTransition
+      // pour que la fin d'autoplay suive la même destination que le bouton Maison.
+      const backToRoot: StudioTransition = {
+        actionNode: rootActionUuid,
+        optionIndex: index,
+      };
 
       stageNodes.push({
         uuid: menuUuid,
@@ -205,8 +232,8 @@ export function buildStudioPack(pack: PackDraft): {
         audio: registerAsset(story.storyAudioPath),
         type: "story",
         name: leafUuid,
-        okTransition: null,
-        homeTransition: { actionNode: rootActionUuid, optionIndex: index },
+        okTransition: backToRoot,
+        homeTransition: backToRoot,
         controlSettings: STORY_CONTROL_SETTINGS,
       });
     });

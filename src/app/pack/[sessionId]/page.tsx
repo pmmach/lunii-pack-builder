@@ -52,8 +52,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { exportPackAction } from "@/lib/actions/export-pack";
 import {
@@ -146,6 +151,51 @@ function SortableStoryItem({
   );
 }
 
+/**
+ * Lisse l'affichage d'une progression reçue par paliers (10, 40, 55…) :
+ * anime en continu vers la dernière valeur connue, et fait "ramper" la
+ * barre entre deux paliers pour donner un retour visuel constant même
+ * quand le serveur ne renvoie rien de neuf pendant un moment.
+ */
+function useAnimatedProgress(rawProgress: number, active: boolean): number {
+  const [display, setDisplay] = useState(0);
+  const rawRef = useRef(rawProgress);
+  const lastChangeRef = useRef(Date.now());
+
+  useEffect(() => {
+    if (rawProgress !== rawRef.current) {
+      rawRef.current = rawProgress;
+      lastChangeRef.current = Date.now();
+    }
+  }, [rawProgress]);
+
+  useEffect(() => {
+    if (!active) {
+      setDisplay(0);
+      lastChangeRef.current = Date.now();
+      return;
+    }
+    let rafId: number;
+    const tick = () => {
+      const elapsed = Date.now() - lastChangeRef.current;
+      // Plafond qui grimpe lentement le temps qu'on attend une vraie
+      // mise à jour, sans jamais dépasser 97% avant la fin réelle.
+      const creepCeiling = Math.min(97, rawRef.current + elapsed / 120);
+      const target = Math.max(rawRef.current, Math.min(creepCeiling, 97), 0);
+      const finalTarget = rawRef.current >= 100 ? 100 : target;
+      setDisplay((prev) => {
+        const next = prev + (finalTarget - prev) * 0.12;
+        return Math.abs(finalTarget - next) < 0.15 ? finalTarget : next;
+      });
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [active]);
+
+  return Math.round(display);
+}
+
 async function waitJob(
   jobId: string,
   onProgress?: (p: number, msg?: string) => void
@@ -177,10 +227,12 @@ export default function PackWorkshopPage() {
   const [busy, setBusy] = useState(false);
   const [progressMsg, setProgressMsg] = useState("");
   const [progress, setProgress] = useState(0);
-  const [activeTab, setActiveTab] = useState<string>("");
+  const [openStoryId, setOpenStoryId] = useState<string>("");
   const [draftStories, setDraftStories] = useState<Record<string, Draft>>({});
   const [removeId, setRemoveId] = useState<string | null>(null);
   const autoPrepared = useRef(false);
+  const progressCardRef = useRef<HTMLDivElement | null>(null);
+  const displayProgress = useAnimatedProgress(progress, busy);
 
   useEffect(() => {
     const loaded = loadSession(sessionId);
@@ -190,6 +242,19 @@ export default function PackWorkshopPage() {
     }
     setState(loaded);
   }, [sessionId, router]);
+
+  // Recentre la vue sur la barre de progression à chaque grande étape
+  // de traitement (préparation, découpe, export), où que soit défilée la page.
+  useEffect(() => {
+    if (!busy) return;
+    const id = requestAnimationFrame(() => {
+      progressCardRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [busy]);
 
   const persist = useCallback((next: SessionState) => {
     setState(next);
@@ -224,21 +289,50 @@ export default function PackWorkshopPage() {
       const drafts: Record<string, Draft> = {};
 
       try {
-        for (let i = 0; i < selected.length; i++) {
-          const ep = selected[i];
-          if (!ep) continue;
-          setProgressMsg(`Préparation : ${ep.title}`);
+        // Lancer toutes les préparations en parallèle ; le sémaphore
+        // serveur (MAX_CONCURRENT_JOBS) borne la charge réelle.
+        const started = await Promise.all(
+          selected.map(async (ep) => {
+            const prep = await prepareEpisodeAction(sessionId, ep);
+            return { ep, prep };
+          })
+        );
 
-          const prep = await prepareEpisodeAction(sessionId, ep);
+        for (const { ep, prep } of started) {
           if (!prep.ok) {
             toast.error(prep.error);
             return false;
           }
+        }
 
-          const waited = await waitJob(prep.data.jobId, (p, msg) => {
-            setProgress(p);
-            if (msg) setProgressMsg(msg);
-          });
+        const jobProgress = new Map<string, number>();
+        for (const { ep, prep } of started) {
+          if (prep.ok) jobProgress.set(ep.id, 0);
+        }
+
+        const results = await Promise.all(
+          started.map(async ({ ep, prep }) => {
+            if (!prep.ok) return { ep, waited: null as null };
+            const waited = await waitJob(prep.data.jobId, (p, msg) => {
+              jobProgress.set(ep.id, p);
+              const values = [...jobProgress.values()];
+              const avg =
+                values.reduce((a, b) => a + b, 0) / Math.max(1, values.length);
+              setProgress(Math.round(avg));
+              if (msg) {
+                setProgressMsg(
+                  selected.length > 1
+                    ? `Préparation (${selected.length} épisodes)…`
+                    : msg
+                );
+              }
+            });
+            return { ep, waited };
+          })
+        );
+
+        for (const { ep, waited } of results) {
+          if (!waited) continue;
           if (!waited.ok) {
             toast.error(waited.error);
             return false;
@@ -256,13 +350,13 @@ export default function PackWorkshopPage() {
             toast.error(
               "Vignette manquante pour cet épisode (image source indisponible)."
             );
-            // Continuer si possible avec un placeholder impossible — mieux d'échouer clairement
             return false;
           }
 
-          const duration = ep.durationSeconds && ep.durationSeconds > 0
-            ? ep.durationSeconds
-            : 30;
+          const duration =
+            ep.durationSeconds && ep.durationSeconds > 0
+              ? ep.durationSeconds
+              : 30;
 
           drafts[ep.id] = {
             title: ep.title,
@@ -277,7 +371,7 @@ export default function PackWorkshopPage() {
         }
 
         setDraftStories(drafts);
-        setActiveTab(selected[0]?.id ?? "");
+        setOpenStoryId(selected[0]?.id ?? "");
         persist({ ...current, step: 3 });
         return true;
       } finally {
@@ -309,46 +403,58 @@ export default function PackWorkshopPage() {
   async function validateStoriesAndGoToPack() {
     if (!state) return;
     setBusy(true);
+    setProgress(5);
+    setProgressMsg("Découpe audio…");
     try {
-      const prepared: PreparedStory[] = [];
-      for (const epId of state.selectedEpisodeIds) {
-        const draft = draftStories[epId];
-        const ep = episodes.find((e) => e.id === epId);
-        if (!draft || !ep) continue;
+      const targets = state.selectedEpisodeIds
+        .map((epId) => {
+          const draft = draftStories[epId];
+          const ep = episodes.find((e) => e.id === epId);
+          if (!draft || !ep) return null;
+          return { epId, draft, ep };
+        })
+        .filter(
+          (t): t is NonNullable<typeof t> => t !== null
+        );
 
-        setProgressMsg(`Découpe : ${draft.title}`);
-        const trim = await trimEpisodeAction(sessionId, epId, {
-          startSeconds: draft.start,
-          endSeconds: draft.end,
-        });
-        if (!trim.ok) {
-          toast.error(trim.error);
+      if (targets.length === 0) {
+        toast.error("Aucune histoire prête");
+        return;
+      }
+
+      setProgressMsg(
+        targets.length > 1
+          ? `Découpe (${targets.length} épisodes)…`
+          : `Découpe : ${targets[0]?.draft.title ?? "audio"}`
+      );
+      setProgress(20);
+
+      const results = await Promise.all(
+        targets.map(async ({ epId, draft, ep }) => {
+          const trim = await trimEpisodeAction(sessionId, epId, {
+            startSeconds: draft.start,
+            endSeconds: draft.end,
+          });
+          return { epId, draft, ep, trim };
+        })
+      );
+
+      const prepared: PreparedStory[] = [];
+      for (const row of results) {
+        if (!row.trim.ok) {
+          toast.error(row.trim.error);
           return;
         }
-        const waited = await waitJob(trim.data.jobId, (p, msg) => {
-          setProgress(p);
-          if (msg) setProgressMsg(msg);
-        });
-        if (!waited.ok) {
-          toast.error(waited.error);
-          return;
-        }
-        const ref = waited.resultRef
-          ? (JSON.parse(waited.resultRef) as {
-              storyPath: string;
-              durationSeconds: number;
-            })
-          : null;
 
         prepared.push({
-          episode: ep,
-          title: draft.title,
-          storyAudioPath: ref?.storyPath ?? draft.storyPath,
-          coverImagePath: draft.coverPath,
-          peaks: draft.peaks,
-          trimStart: draft.start,
-          trimEnd: draft.end,
-          durationSeconds: ref?.durationSeconds ?? draft.end - draft.start,
+          episode: row.ep,
+          title: row.draft.title,
+          storyAudioPath: row.trim.data.storyPath,
+          coverImagePath: row.draft.coverPath,
+          peaks: row.draft.peaks,
+          trimStart: row.draft.start,
+          trimEnd: row.draft.end,
+          durationSeconds: row.trim.data.durationSeconds,
         });
       }
 
@@ -460,12 +566,17 @@ export default function PackWorkshopPage() {
 
       <main className="mx-auto max-w-4xl space-y-6 px-4 py-6">
         {busy && (
-          <Card>
+          <Card ref={progressCardRef} className="border-primary/40 scroll-mt-20">
             <CardContent className="space-y-2 pt-6">
-              <Progress value={progress || null} />
-              <p className="text-muted-foreground text-sm">
-                {progressMsg || "Traitement…"}
-              </p>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-muted-foreground text-sm">
+                  {progressMsg || "Traitement…"}
+                </p>
+                <span className="text-muted-foreground text-sm font-medium tabular-nums">
+                  {displayProgress}%
+                </span>
+              </div>
+              <Progress value={displayProgress} />
             </CardContent>
           </Card>
         )}
@@ -567,82 +678,126 @@ export default function PackWorkshopPage() {
 
         {step === 3 && (
           <section className="space-y-4">
-            <h1 className="text-2xl font-bold">Édition des histoires</h1>
+            <div className="space-y-1">
+              <h1 className="text-2xl font-bold">Édition des histoires</h1>
+              <p className="text-muted-foreground text-sm">
+                {state.selectedEpisodeIds.length} histoire
+                {state.selectedEpisodeIds.length > 1 ? "s" : ""} — déplie pour
+                ajuster le titre et le découpage audio.
+              </p>
+            </div>
             {Object.keys(draftStories).length === 0 ? (
               <Skeleton className="h-48 w-full" />
             ) : (
-              <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="flex h-auto flex-wrap">
-                  {state.selectedEpisodeIds.map((id) => {
-                    const d = draftStories[id];
-                    return (
-                      <TabsTrigger key={id} value={id} className="min-h-11">
-                        {d?.title?.slice(0, 24) ?? id.slice(0, 8)}
-                      </TabsTrigger>
-                    );
-                  })}
-                </TabsList>
-                {state.selectedEpisodeIds.map((id) => {
+              <Accordion
+                value={openStoryId ? [openStoryId] : []}
+                onValueChange={(next) => setOpenStoryId(next[0] ?? "")}
+                className="gap-3"
+              >
+                {state.selectedEpisodeIds.map((id, index) => {
                   const d = draftStories[id];
-                  if (!d) {
-                    return (
-                      <TabsContent key={id} value={id}>
-                        <Skeleton className="h-48 w-full" />
-                      </TabsContent>
-                    );
-                  }
+                  const episode = episodes.find((e) => e.id === id);
+                  const title =
+                    d?.title?.trim() || episode?.title || `Histoire ${index + 1}`;
+                  const total = state.selectedEpisodeIds.length;
+
                   return (
-                    <TabsContent key={id} value={id} className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor={`title-${id}`}>Titre</Label>
-                        <Input
-                          id={`title-${id}`}
-                          value={d.title}
-                          className="min-h-11"
-                          onChange={(e) =>
-                            setDraftStories((prev) => ({
-                              ...prev,
-                              [id]: { ...d, title: e.target.value },
-                            }))
-                          }
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Audio — début / fin de l&apos;histoire</Label>
-                        <WaveformEditor
-                          peaks={d.peaks}
-                          durationSeconds={d.duration}
-                          start={d.start}
-                          end={d.end}
-                          onChange={(start, end) =>
-                            setDraftStories((prev) => ({
-                              ...prev,
-                              [id]: { ...d, start, end },
-                            }))
-                          }
-                        />
-                        <p className="text-muted-foreground text-xs">
-                          Intro par défaut : 8 premières secondes si aucun extrait
-                          dédié n&apos;est fourni.
-                        </p>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Vignette</Label>
-                        <div className="bg-muted size-40 overflow-hidden rounded-lg">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={
-                              episodes.find((e) => e.id === id)?.imageUrl ?? ""
-                            }
-                            alt=""
-                            className="size-full object-cover"
-                          />
-                        </div>
-                      </div>
-                    </TabsContent>
+                    <AccordionItem
+                      key={id}
+                      value={id}
+                      className="bg-card not-last:border-b-0 rounded-xl border px-4 shadow-none"
+                    >
+                      <AccordionTrigger className="min-h-11 gap-3 py-3 hover:no-underline">
+                        <span className="flex min-w-0 flex-1 items-start gap-3 text-left">
+                          <Badge
+                            variant="secondary"
+                            className="mt-0.5 shrink-0 tabular-nums"
+                          >
+                            {index + 1}/{total}
+                          </Badge>
+                          <span className="min-w-0 flex-1 space-y-1">
+                            <span className="block text-sm leading-snug font-medium text-balance wrap-break-word">
+                              {title}
+                            </span>
+                            {episode?.durationSeconds !== undefined && (
+                              <span className="text-muted-foreground block text-xs font-normal">
+                                {formatDuration(episode.durationSeconds)}
+                              </span>
+                            )}
+                          </span>
+                          {d ? (
+                            <Badge variant="outline" className="mt-0.5 shrink-0">
+                              Prête
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="mt-0.5 shrink-0">
+                              Chargement…
+                            </Badge>
+                          )}
+                        </span>
+                      </AccordionTrigger>
+                      <AccordionContent className="space-y-4 pb-4">
+                        {!d ? (
+                          <Skeleton className="h-48 w-full" />
+                        ) : (
+                          <>
+                            <div className="space-y-2">
+                              <Label htmlFor={`title-${id}`}>Titre</Label>
+                              <Input
+                                id={`title-${id}`}
+                                value={d.title}
+                                className="min-h-11"
+                                onChange={(e) =>
+                                  setDraftStories((prev) => ({
+                                    ...prev,
+                                    [id]: { ...d, title: e.target.value },
+                                  }))
+                                }
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>
+                                Audio — début / fin de l&apos;histoire
+                              </Label>
+                              <WaveformEditor
+                                peaks={d.peaks}
+                                durationSeconds={d.duration}
+                                start={d.start}
+                                end={d.end}
+                                onChange={(start, end) =>
+                                  setDraftStories((prev) => ({
+                                    ...prev,
+                                    [id]: { ...d, start, end },
+                                  }))
+                                }
+                              />
+                              <p className="text-muted-foreground text-xs">
+                                Intro par défaut : 8 premières secondes si aucun
+                                extrait dédié n&apos;est fourni.
+                              </p>
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Vignette</Label>
+                              <div className="bg-muted size-40 overflow-hidden rounded-lg">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={episode?.imageUrl ?? ""}
+                                  alt={
+                                    episode?.imageUrl
+                                      ? `Vignette de ${title}`
+                                      : ""
+                                  }
+                                  className="size-full object-cover"
+                                />
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </AccordionContent>
+                    </AccordionItem>
                   );
                 })}
-              </Tabs>
+              </Accordion>
             )}
             <Button
               className="bg-accent text-accent-foreground hover:bg-accent/90 min-h-11"
@@ -776,7 +931,16 @@ export default function PackWorkshopPage() {
                     Télécharger le .zip
                   </a>
                   <p className="text-muted-foreground text-sm">
-                    Importez ce fichier via le bouton <em>create pack</em> sur{" "}
+                    Importez ce zip dans{" "}
+                    <a
+                      href="https://lunii-admin-builder.pages.dev/"
+                      className="text-primary underline"
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Lunii Admin Builder
+                    </a>{" "}
+                    ou{" "}
                     <a
                       href="https://lunii-admin-web.pages.dev/"
                       className="text-primary underline"
@@ -784,8 +948,8 @@ export default function PackWorkshopPage() {
                       rel="noreferrer"
                     >
                       Lunii Admin Web
-                    </a>
-                    .
+                    </a>{" "}
+                    pour l&apos;installer sur l&apos;appareil.
                   </p>
                 </CardContent>
               </Card>

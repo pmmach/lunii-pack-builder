@@ -1,9 +1,13 @@
 import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
 import ffprobeInstaller from "@ffprobe-installer/ffprobe";
 import ffmpeg from "fluent-ffmpeg";
-import { unlink } from "node:fs/promises";
+import path from "node:path";
+import { copyFile, unlink } from "node:fs/promises";
 import { err, ok, type Result } from "@/lib/shared/result";
 import type { AudioProcessResult, TrimOptions } from "./types";
+
+const FULL_FILE_START_EPS = 0.05;
+const FULL_FILE_END_EPS = 0.2;
 
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 ffmpeg.setFfprobePath(ffprobeInstaller.path);
@@ -28,15 +32,46 @@ export async function trimAudio(
   }
 
   const duration = opts.endSeconds - opts.startSeconds;
+  const sourceIsMp3 = path.extname(inputPath).toLowerCase() === ".mp3";
+
+  if (sourceIsMp3 && opts.startSeconds <= FULL_FILE_START_EPS) {
+    const probed = await probeDuration(inputPath);
+    if (probed.ok && opts.endSeconds >= probed.data - FULL_FILE_END_EPS) {
+      try {
+        if (path.resolve(inputPath) !== path.resolve(outputPath)) {
+          await copyFile(inputPath, outputPath);
+        }
+        onProgress?.(100);
+        return ok({
+          filePath: outputPath,
+          durationSeconds: probed.data,
+        });
+      } catch {
+        return err("Le traitement audio a échoué", "FFMPEG_ERROR");
+      }
+    }
+  }
 
   try {
     await new Promise<void>((resolve, reject) => {
-      ffmpeg(inputPath)
-        .setStartTime(opts.startSeconds)
-        .setDuration(duration)
-        .audioCodec("libmp3lame")
-        .audioFrequency(44100)
-        .audioBitrate("128k")
+      // -ss avant -i (seekInput) : saute rapidement le début sans tout décoder.
+      const command = ffmpeg(inputPath).seekInput(opts.startSeconds).setDuration(
+        duration
+      );
+
+      if (sourceIsMp3) {
+        // Source déjà MP3 : copie de flux (quasi instantanée, coupe à la trame ~26ms).
+        command.audioCodec("copy");
+      } else {
+        // Conversion nécessaire (ex. m4a) : lame en mode rapide.
+        command
+          .audioCodec("libmp3lame")
+          .audioFrequency(44100)
+          .audioBitrate("128k")
+          .outputOptions(["-compression_level", "0"]);
+      }
+
+      command
         .noVideo()
         .output(outputPath)
         .on("progress", (progress) => {

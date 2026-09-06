@@ -19,10 +19,10 @@ Utilisateur
     │  (répéter pour plusieurs histoires si pack multi)
     ▼
 [UI Next.js] ── Server Action: exportPack(pack) ──▶ [lib/pack/*]
-    │                                                   │ arborescence lunii-admin + md.yaml → zip
+    │                                                   │ story.json + assets/ (STUdio) → zip
     │◀───────────────── fichier .zip téléchargeable ────┘
     ▼
-Utilisateur importe le .zip dans Lunii Admin Web ("create pack" → installe sur l'appareil)
+Utilisateur importe le .zip dans Lunii Admin Builder / Web → installe sur l'appareil (USB)
 ```
 
 ## Modules applicatifs
@@ -45,23 +45,24 @@ Utilisateur importe le .zip dans Lunii Admin Web ("create pack" → installe sur
 
 - **`lib/media/`**
   - `download.ts` : téléchargement de l'audio source vers le workspace de session
-  - `trim.ts` : découpe ffmpeg (point début/fin) + normalisation de sortie mp3
+  - `trim.ts` : découpe audio (copie fichier / copie de flux MP3 / ré-encodage lame si besoin) — pas de normalisation loudness
   - `image.ts` : recadrage/redimensionnement sharp vers 320x320 JPEG
   - `waveform.ts` : génération des données de waveform pour l'éditeur visuel côté client
 
 - **`lib/pack/`**
-  - `model.ts` : types `Pack`, `Story` (titre, uuid, chemins des assets)
-  - `builder.ts` : assemble l'arborescence de dossiers `pack-name/.../title.mp3, cover.jpeg, story.mp3` + `md.yaml`
-  - `zipper.ts` : compresse le dossier en `.zip` via `archiver`
+  - `types.ts` / `model.ts` : `PackDraft`, `StoryDraft` (titre, auteur, uuid, chemins des assets)
+  - `studio-format.ts` : construction du graphe STUdio (`story.json`) + plan de copie des assets ; fin de lecture = retour menu (`okTransition` = `homeTransition`)
+  - `write-to-disk.ts` : écrit `assets/` + `story.json`, génère l'intro 8s par défaut si besoin
+  - `zip.ts` : compresse le contenu à la **racine** du `.zip` via `archiver` (pas de dossier packSlug wrapper)
 
 - **`lib/jobs/`**
-  - Tracker de progression en mémoire (téléchargement/conversion peuvent prendre du temps) exposé à l'UI via polling ou stream
+  - Tracker de progression en mémoire pour la **préparation** (téléchargement / waveform), exposé à l'UI via polling ; la **découpe** est synchrone (Server Action)
 
 ## Stockage de session
 
 - `workspace/<sessionId>/source/` : audio brut téléchargé, métadonnées récupérées
-- `workspace/<sessionId>/pack/` : arborescence finale prête à zipper
-- Nettoyage automatique après téléchargement du zip (ou bouton "nettoyer" explicite)
+- `workspace/<sessionId>/pack/<slug>/` : `story.json` + `assets/` prêts à zipper
+- Nettoyage automatique après téléchargement du zip (TTL) ou purge périodique
 
 ## Topologie de déploiement
 
@@ -90,5 +91,6 @@ Utilisateur importe le .zip dans Lunii Admin Web ("create pack" → installe sur
 
 ## Points d'extension prévus (v2+)
 
-- `lib/pack/studio-format.ts` : génération directe du pack STUdio final (`story.json` + assets), pour bypasser l'étape manuelle dans Lunii Admin Web
 - Persistance légère (SQLite) si on veut retrouver ses packs entre deux sessions
+- Normalisation de volume audio (volontairement absente en v1)
+- Écriture directe sur l'appareil (hors scope serveur ; nécessiterait un outil desktop / WebUSB côté client)

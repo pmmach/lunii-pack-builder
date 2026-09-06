@@ -40,14 +40,15 @@ Détail complet du Dockerfile et de la configuration Coolify : `specs/05-deploie
 
 ### Traitement média
 
-- **ffmpeg** via `@ffmpeg-installer/ffmpeg` + `fluent-ffmpeg` : trim audio, normalisation, conversion mp3
+- **ffmpeg** via `@ffmpeg-installer/ffmpeg` + `fluent-ffmpeg` : trim audio (copie de flux MP3 ou conversion lame si besoin), génération de waveform — **pas** de normalisation loudness
 - **wavesurfer.js** (côté client) : affichage de la forme d'onde et sélection visuelle du point de début/fin avant trim serveur
 - **sharp** : recadrage/redimensionnement des images de couverture vers le format cible (320x320 JPEG)
-- **archiver** : génération du `.zip` final respectant l'arborescence Lunii Admin Web
-- **uuid** : génération des UUID v4 requis par `md.yaml`
-- **js-yaml** : écriture du fichier `md.yaml`
+- **archiver** : génération du `.zip` STUdio final (`story.json` + `assets/` à la racine)
+- **uuid** : génération des UUID v4 du pack et des nœuds du graphe
 - **@dnd-kit/core** + **@dnd-kit/sortable** : réordonnancement des histoires dans un pack multi-histoires
 - **next-themes** + **lucide-react** : thème clair/sombre et icônes de l'interface
+
+> Note : `js-yaml` n'est plus requis pour l'export (plus de `md.yaml` ; métadonnées dans `story.json`).
 
 ### Stockage
 

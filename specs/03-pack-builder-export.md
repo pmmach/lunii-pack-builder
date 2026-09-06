@@ -10,7 +10,7 @@ Construire, à partir d'une ou plusieurs histoires préparées, le graphe STUdio
 
 Le besoin initial distingue une "intro" (jouée en sélectionnant l'histoire) du contenu de l'histoire (`storyAudioPath`). Par défaut, en l'absence de sélection explicite d'un extrait dédié par l'utilisateur dans l'éditeur (spec 04) :
 
-> intro = les **8 premières secondes** de `storyAudioPath` (constante `DEFAULT_TITLE_CLIP_SECONDS = 8`, dans `src/lib/pack/constants.ts`), réencodées avec la même fonction `trimAudio` que la spec 02.
+> intro = les **8 premières secondes** de `storyAudioPath` (constante `DEFAULT_TITLE_CLIP_SECONDS = 8`, dans `src/lib/pack/constants.ts`), produites avec la même fonction `trimAudio` que la spec 02 (copie de flux si la source est déjà MP3).
 
 Si l'utilisateur a explicitement fourni un `titleAudioPath` distinct (généré par l'éditeur de la spec 04 via un second appel à `trimAudio`), celui-ci est utilisé tel quel.
 
@@ -70,10 +70,10 @@ export function buildStudioPack(pack: PackDraft): { studioPack: StudioPack; asse
 Pure (aucun accès disque) : `buildStudioPack` construit uniquement l'objet JSON et la liste des copies d'assets à effectuer ; `pack.stories` doivent déjà avoir un `titleAudioPath` résolu (voir `write-to-disk.ts`).
 
 - `randomAssetId()` génère un identifiant de 10 caractères alphanumériques (imite le nommage observé dans un pack réel, ex: `1Lh78QsHxV`) ; chaque asset copié reçoit un nom `<randomAssetId()><extension d'origine>`
-- **1 histoire** : le stage node `cover` (uuid = `pack.uuid`, `squareOne: true`) reprend l'image et l'intro de **cette histoire** (pas celles du pack) → action node (1 option) → stage node `story` (image `null`, audio = `storyAudioPath`)
-- **N histoires (N>1)** : le stage node `cover` (uuid = `pack.uuid`) reprend l'image/intro du **pack** → action node racine (N options, un par histoire dans l'ordre) → pour chaque histoire, un stage node `menu` (sa propre image/intro, `homeTransition: null`) → son propre action node (1 option) → stage node `story` (image `null`, audio, `homeTransition: { actionNode: <action racine>, optionIndex: <index> }`)
+- **1 histoire** : stage node `cover` (uuid = `pack.uuid`, `squareOne: true`, image+intro de **cette histoire**) → action `toStory` → stage node `story` (image `null`) → action `backToCover` (options: `[cover]`) ; sur le story, **`okTransition` = `homeTransition` = backToCover** (équivalent `onEnd: "back"`, évite l'erreur SD en fin d'autoplay). Total : 2 stage nodes, **2** action nodes
+- **N histoires (N>1)** : `cover` (image/intro du **pack**) → action racine (N options) → pour chaque histoire : `menu` (image/intro, `homeTransition: null`) → action → `story` (image `null`) avec **`okTransition` = `homeTransition` = `{ actionNode: <action racine>, optionIndex: <index> }`**. Total : 1 + 2N stage nodes, N+1 action nodes
 - `controlSettings` fixes : `{wheel:true,ok:true,home:true,pause:false,autoplay:false}` pour `cover`/`menu`, `{wheel:false,ok:false,home:true,pause:true,autoplay:true}` pour `story`
-- `okTransition`/`homeTransition` à `null` sauf mentionné ci-dessus
+- Sur `cover`/`menu` : `homeTransition` reste `null` (Maison → bibliothèque appareil)
 
 ## Écriture sur disque (`src/lib/pack/write-to-disk.ts`)
 
@@ -132,10 +132,10 @@ export async function exportPackAction(pack: PackDraft): Promise<Result<{ downlo
 ## Tests
 
 - `builder.test.ts` : construit un `PackDraft` avec 2 histoires, teste `reorderStories`, `removeStoryFromPack`, et les cas d'invalidité de `validatePackDraft` (titre vide, auteur vide, aucune histoire, fichier manquant)
-- `studio-format.test.ts` : vérifie le graphe produit par `buildStudioPack` pour 1 histoire (2 stage nodes, 1 action node, structure exacte du pack réel de référence) et pour plusieurs histoires (1 cover + N×(menu+story), N+1 action nodes, `homeTransition` des stories pointant vers la bonne position)
-- `write-to-disk.test.ts` : utilise un dossier temporaire (`fs.mkdtemp`) et des fixtures audio/image de la spec 02 ; vérifie que `packDir` contient exactement `assets/` et `story.json`, que tous les fichiers référencés dans `story.json` existent dans `assets/`, et la gestion de collision de noms de dossiers
-- `zip.test.ts` : zippe un dossier de test (`story.json` + `assets/`), relit l'archive avec `yauzl` (dev dependency) pour vérifier que les entrées sont à la racine (pas de préfixe `<packSlug>/`)
+- `studio-format.test.ts` : vérifie le graphe pour 1 histoire (2 stage nodes, **2** action nodes, `okTransition`/`homeTransition` du story → cover) et pour plusieurs histoires (1 cover + N×(menu+story), N+1 action nodes, `okTransition` = `homeTransition` vers le menu racine)
+- `write-to-disk.test.ts` : dossier temporaire + fixtures ; vérifie `assets/` + `story.json`, références d'assets cohérentes, collisions de noms, et les transitions de retour menu
+- `zip.test.ts` : zippe un dossier de test (`story.json` + `assets/`), relit avec `yauzl` pour vérifier les entrées à la racine (pas de préfixe `<packSlug>/`)
 
 ## Critère d'acceptation manuel
 
-Générer un pack (1 histoire, puis plusieurs histoires) de bout en bout, télécharger le `.zip`, l'importer dans [Lunii Admin Builder](https://lunii-admin-builder.pages.dev/) : l'import doit réussir sans erreur et afficher le bon graphe (histoire(s), image(s), audio(s)). Installer ensuite le pack sur l'appareil Lunii via Lunii Admin Builder ou Lunii Admin Web pour confirmer la compatibilité de bout en bout (le cas multi-histoires n'a pas encore été vérifié sur un pack réel).
+Générer un pack (1 histoire, puis plusieurs histoires) de bout en bout, télécharger le `.zip`, l'**importer** dans [Lunii Admin Builder](https://lunii-admin-builder.pages.dev/) : l'import doit réussir et afficher le bon graphe. Installer sur l'appareil Lunii et **écouter jusqu'à la fin** : pas d'« erreur carte SD » — retour attendu au cover (1 histoire) ou au menu du pack (multi). Le cas multi-histoires sur appareil reste à valider manuellement si besoin.

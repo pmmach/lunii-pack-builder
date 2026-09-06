@@ -66,33 +66,49 @@ Si `kind === "episode"` : cette étape est sautée, l'unique épisode passe dire
 
 ## Étape 3 — Édition par histoire (répétée pour chaque épisode sélectionné)
 
-Sous-étapes affichées dans un `Tabs` (un onglet par histoire en cours de préparation) ou une liste séquentielle avec navigation "Suivant" — préférer les `Tabs` shadcn si ≤ 6 histoires, sinon une liste avec accordéon.
+Sous-étapes affichées dans un **Accordion** shadcn (`src/components/ui/accordion.tsx`, Base UI) — **un seul panneau ouvert à la fois** (pas de barre d'onglets : les titres longs Radio France provoquaient chevauchements/troncatures).
+
+En-tête de chaque item :
+- badge `n/N`
+- titre **complet** (wrap autorisé, pas de `slice`)
+- durée de l'épisode si connue
+- badge d'état (« Prête » / « Chargement… »)
+
+Corps (panneau déplié) = édition titre / waveform / vignette.
+
+Le premier épisode de la sélection est ouvert par défaut (`openStoryId`).
 
 Pour chaque histoire :
 
 1. **Titre** : `Input` pré-rempli avec le titre de l'épisode, éditable
-2. **Audio** : lecteur avec waveform (`wavesurfer.js`, région de sélection draggable) affichant les peaks retournés par `generateWaveformPeaks` ; deux poignées : "Début/Fin de l'histoire" (obligatoire) et, dans un accordéon "Options avancées" replié par défaut, une plage optionnelle "Extrait pour l'intro" (si non renseignée, l'extrait par défaut de 8s sera utilisé — l'indiquer en texte d'aide)
-3. **Image** : aperçu carré 320x320 de la vignette recadrée automatiquement, bouton "Recadrer" ouvrant un `Dialog` avec un crop interactif (glisser pour déplacer le point focal), bouton "Remplacer l'image" (upload fichier local)
-4. Affichage de la progression pendant le traitement serveur (téléchargement + trim + waveform) : `Progress` shadcn lié au polling de `getJobStatusAction` (intervalle 1s, `setInterval` nettoyé au démontage du composant), avec le `message` du job affiché sous la barre
+2. **Audio** : lecteur avec waveform (`wavesurfer.js`, région de sélection draggable) affichant les peaks retournés par `generateWaveformPeaks` ; poignées début/fin de l'histoire ; texte d'aide : intro par défaut = 8 premières secondes si aucun extrait dédié
+3. **Image** : aperçu carré 320x320 de la vignette (alt descriptif si image présente)
+4. **Progression** pendant les traitements serveur :
+   - **Préparation** (téléchargement + vignette + waveform) : `Progress` shadcn liée au polling de `getJobStatusAction` (intervalle 1s). Plusieurs épisodes sélectionnés sont préparés en **parallèle** (borné par `MAX_CONCURRENT_JOBS` côté serveur)
+   - **Validation / découpe** : appel synchrone à `trimEpisodeAction` (pas de job) ; plusieurs découpes en parallèle si multi-histoires
+   - **Export** : messages "Assemblage…", "Compression…"
+   - À chaque grande étape (`busy === true`) : recentrage sur la carte de progression (`scrollIntoView`)
+   - Pourcentage animé / lissé (plafonné à 97 % avant la fin réelle), avec `message` et `%` visibles
 
-Bouton "Valider cette histoire et passer au pack" en bas.
+Bouton "Valider et passer au pack" en bas.
 
 ## Étape 4 — Composition du pack et export
 
-- Champs `title` et `description` du pack (`Input`/`Textarea`)
-- Liste ordonnable des histoires ajoutées (`@dnd-kit/sortable`) : vignette + titre + durée + bouton supprimer (icône `Trash2` de lucide, avec confirmation via `Dialog` avant suppression définitive)
-- Bouton "Ajouter une autre histoire" → retour à l'étape 2 (même émission déjà chargée en mémoire) ou à l'étape 1 (nouvelle URL) au choix de l'utilisateur (deux boutons distincts)
-- Bouton principal "Générer le pack" (variant accent) : désactivé tant que `validatePackDraft` (côté client, miroir simplifié de la validation serveur) échoue, avec le motif affiché à côté du bouton
-- Pendant l'export : `Progress` + message ("Assemblage du pack…", "Compression…")
-- Résultat : carte de succès avec nom du pack, nombre d'histoires, taille du fichier, bouton "Télécharger le .zip" (`<a href={downloadUrl} download>`), et rappel avec lien direct vers [Lunii Admin Web](https://lunii-admin-web.pages.dev/) expliquant l'étape suivante ("Importez ce fichier via le bouton *create pack*")
+- Champs **`title`**, **`author`** (obligatoire, prérempli depuis `source.showAuthor`) et `description` du pack (`Input`/`Textarea`)
+- Liste ordonnable des histoires ajoutées (`@dnd-kit/sortable`) : vignette + titre + durée + bouton supprimer (icône `Trash2`, confirmation via `Dialog`)
+- Bouton "Ajouter une autre histoire (même émission)" → retour à l'étape 2 ; bouton "Nouvelle URL" → retour à `/`
+- Bouton principal "Générer le pack" (variant accent) : désactivé tant que titre/auteur vides ou aucune histoire (`validatePackDraftClient`)
+- Pendant l'export : `Progress` + message, même recentrage/lissage que l'étape 3
+- Résultat : carte de succès avec nom du pack, nombre d'histoires, taille, bouton "Télécharger le .zip", et rappel avec lien vers [Lunii Admin Builder](https://lunii-admin-builder.pages.dev/) / [Lunii Admin Web](https://lunii-admin-web.pages.dev/) : **importer** le zip (pas le bouton "create pack" depuis une arborescence) puis installer sur l'appareil
 
 ## Composants shadcn à ajouter (en plus de ceux de la spec 00)
 
 ```bash
-npx shadcn@latest add checkbox dialog tabs badge textarea sonner slider scroll-area
+npx shadcn@latest add checkbox dialog tabs badge textarea sonner slider scroll-area accordion
 ```
 
-- `sonner` (toasts) : utilisé pour les erreurs non bloquantes (ex: échec de rechargement d'une image), pas pour les erreurs bloquantes qui restent en `Alert` inline
+- `accordion` : navigation multi-histoires à l'étape 3 (remplace l'usage des `tabs` pour cette étape ; `tabs` peut rester installé pour d'autres usages)
+- `sonner` (toasts) : erreurs non bloquantes ; erreurs bloquantes en `Alert` inline
 
 ## Accessibilité (obligatoire, cf. `.cursor/rules/050-ui-ux.mdc`)
 
@@ -111,5 +127,6 @@ Points de rupture à tester : 375px (mobile), 768px (tablette), 1024px et 1440px
 - [ ] Les 4 étapes sont navigables entièrement au clavier
 - [ ] Mode sombre fonctionnel via un toggle (icône soleil/lune dans l'en-tête), contrastes vérifiés dans les deux modes
 - [ ] Aucun écran blanc pendant un chargement (skeletons ou barres de progression partout où une action serveur > 300ms est en cours)
+- [ ] Pendant préparation / découpe / export : la page recentre sur la barre de progression, et la barre avance de façon continue (pas de sauts figés longtemps)
 - [ ] Testé visuellement aux 4 largeurs listées ci-dessus
 - [ ] `npm run lint` et `npm run build` toujours au vert après ajout de l'UI

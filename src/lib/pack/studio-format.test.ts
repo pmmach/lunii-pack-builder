@@ -29,7 +29,7 @@ describe("randomAssetId", () => {
 });
 
 describe("buildStudioPack — 1 histoire", () => {
-  it("construit un cover + un story reliés par une seule action", () => {
+  it("construit un cover + un story avec retour au cover en fin de lecture", () => {
     let pack = createPackDraft("sess", { title: "Pack", author: "Auteur" });
     pack = addStoryToPack(pack, {
       id: "1",
@@ -42,7 +42,7 @@ describe("buildStudioPack — 1 histoire", () => {
     const { studioPack, assets } = buildStudioPack(pack);
 
     expect(studioPack.stageNodes).toHaveLength(2);
-    expect(studioPack.actionNodes).toHaveLength(1);
+    expect(studioPack.actionNodes).toHaveLength(2);
 
     const [coverNode, storyNode] = studioPack.stageNodes;
     if (!coverNode || !storyNode) throw new Error("Noeuds manquants");
@@ -60,8 +60,6 @@ describe("buildStudioPack — 1 histoire", () => {
 
     expect(storyNode.type).toBe("story");
     expect(storyNode.image).toBeNull();
-    expect(storyNode.okTransition).toBeNull();
-    expect(storyNode.homeTransition).toBeNull();
     expect(storyNode.controlSettings).toEqual({
       wheel: false,
       ok: false,
@@ -70,13 +68,22 @@ describe("buildStudioPack — 1 histoire", () => {
       autoplay: true,
     });
 
-    const [actionNode] = studioPack.actionNodes;
-    if (!actionNode) throw new Error("Action manquante");
-    expect(coverNode.okTransition).toEqual({
-      actionNode: actionNode.id,
+    const toStoryAction = studioPack.actionNodes.find(
+      (a) => a.id === coverNode.okTransition?.actionNode
+    );
+    if (!toStoryAction) throw new Error("Action cover→story manquante");
+    expect(toStoryAction.options).toEqual([storyNode.uuid]);
+
+    const backAction = studioPack.actionNodes.find(
+      (a) => a.id === storyNode.okTransition?.actionNode
+    );
+    if (!backAction) throw new Error("Action story→cover manquante");
+    expect(backAction.options).toEqual([pack.uuid]);
+    expect(storyNode.okTransition).toEqual({
+      actionNode: backAction.id,
       optionIndex: 0,
     });
-    expect(actionNode.options).toEqual([storyNode.uuid]);
+    expect(storyNode.homeTransition).toEqual(storyNode.okTransition);
 
     // 1 image (cover) + 1 audio (intro) + 1 audio (story) = 3 assets planifiés
     expect(assets).toHaveLength(3);
@@ -86,7 +93,7 @@ describe("buildStudioPack — 1 histoire", () => {
 });
 
 describe("buildStudioPack — plusieurs histoires", () => {
-  it("construit un menu racine + un menu/story par histoire", () => {
+  it("construit un menu racine + un menu/story par histoire avec retour menu", () => {
     let pack = createPackDraft("sess", { title: "Pack", author: "Auteur" });
     pack = addStoryToPack(pack, {
       id: "1",
@@ -130,10 +137,12 @@ describe("buildStudioPack — plusieurs histoires", () => {
     const stories = studioPack.stageNodes.filter((n) => n.type === "story");
     expect(stories).toHaveLength(2);
     stories.forEach((story, index) => {
-      expect(story.homeTransition).toEqual({
+      const back = {
         actionNode: rootAction?.id,
         optionIndex: index,
-      });
+      };
+      expect(story.homeTransition).toEqual(back);
+      expect(story.okTransition).toEqual(back);
     });
   });
 });

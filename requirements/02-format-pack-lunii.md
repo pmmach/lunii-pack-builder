@@ -74,22 +74,32 @@ Relie un noeud interactif (`cover`/`menu`) à un ou plusieurs stage nodes suivan
 
 ### Construction du graphe selon le nombre d'histoires
 
-**1 seule histoire** (vérifié sur un pack réel) — le noeud `cover` du pack **reprend directement** l'image et l'intro de cette histoire (pas de niveau intermédiaire) :
+**1 seule histoire** — le noeud `cover` du pack **reprend directement** l'image et l'intro de cette histoire ; en fin de lecture, retour au cover (évite l'« erreur carte SD » observée avec `okTransition: null` + autoplay) :
 
 ```
-cover (image=cover histoire, audio=intro histoire, squareOne) --okTransition--> action --options:[story]--> story (audio=contenu histoire)
+cover --ok--> actionToStory --options:[story]--> story
+story --ok/home--> actionBackToCover --options:[cover]--> cover
 ```
 
-**Plusieurs histoires** — le noeud `cover` porte l'image/intro du **pack**, et chaque histoire devient un noeud `menu` intermédiaire (sa propre image/intro) menant à son propre noeud `story` :
+Validé manuellement sur appareil Lunii (pack Radio France, 1 histoire) après correctif `onEnd: "back"` (06/09/2026).
+
+**Plusieurs histoires** — le noeud `cover` porte l'image/intro du **pack**, et chaque histoire devient un noeud `menu` intermédiaire menant à son `story` ; en fin de lecture, retour au menu racine :
 
 ```
-cover (pack) --okTransition--> action racine --options:[menu1, menu2, ...]
-  menu1 (histoire 1) --okTransition--> action1 --options:[story1]--> story1
-  menu2 (histoire 2) --okTransition--> action2 --options:[story2]--> story2
+cover --ok--> actionRacine --options:[menu1, menu2, ...]
+  menu1 --ok--> action1 --options:[story1]--> story1 --ok/home--> actionRacine (optionIndex 0)
+  menu2 --ok--> action2 --options:[story2]--> story2 --ok/home--> actionRacine (optionIndex 1)
   ...
 ```
 
-`homeTransition` : `null` sur `cover` et sur chaque `menu` (retour à la bibliothèque de packs par défaut) ; sur chaque `story`, pointe vers `{ actionNode: <action racine>, optionIndex: <position de son histoire> }` (retour au menu du pack, positionné sur la bonne histoire). Cette partie multi-histoires est une extrapolation fidèle de l'algorithme source (non vérifiée sur un pack réel à plusieurs histoires).
+`homeTransition` / `okTransition` en fin de lecture (équivalent `onEnd: "back"` de lunii-admin-builder) :
+
+- Sur `cover` et `menu` : `homeTransition` reste `null` (Maison → bibliothèque de packs)
+- Sur chaque `story` : **`okTransition` = `homeTransition`**, pour que la fin d'autoplay ait une destination (sinon certains firmwares affichent « erreur carte SD »)
+  - **1 histoire** : les deux pointent vers une action dont l'unique option est le cover du pack (2 action nodes au total)
+  - **Multi** : les deux pointent vers `{ actionNode: <action racine>, optionIndex: <position de l'histoire> }` (retour au menu du pack)
+
+Note : un pack de référence produit par Lunii Admin Builder avec `onEnd: "stop"` peut avoir `okTransition`/`homeTransition` à `null` sur le story ; notre générateur **choisit volontairement** le comportement `back` pour la robustesse firmware.
 
 ## Contraintes images à respecter dans notre pipeline
 
@@ -99,8 +109,13 @@ cover (pack) --okTransition--> action racine --options:[menu1, menu2, ...]
 
 ## Contraintes audio à respecter dans notre pipeline
 
-- Format de sortie : MP3
-- On normalise en sortie (ex: 44.1kHz, mono ou stéréo, ~128kbps) pour garder des fichiers légers et cohérents
+- Format de sortie : **MP3** (requis par le format STUdio / Lunii)
+- **Pas de normalisation de loudness** (pas de `loudnorm` ni équivalent) : les fichiers podcast issus d'un flux RSS sont déjà masterisés ; un traitement volume n'apporte rien et ralentirait le pipeline
+- Conversion / découpe (voir `specs/02-pipeline-media.md`) :
+  - Source déjà MP3 + aucune découpe réelle (début ≈ 0, fin ≈ durée) → simple copie fichier
+  - Source déjà MP3 + découpe → copie de flux ffmpeg (`-c:a copy`)
+  - Autre format (ex. m4a) → ré-encodage `libmp3lame` vers ~44.1 kHz / ~128 kbps (mode rapide), pour des fichiers légers et cohérents
+- La préparation d'épisode (téléchargement + waveform) **ne ré-encode pas** l'audio ; le fichier `story.mp3` final n'est produit qu'à la validation du découpage
 
 ## Annexe : ancien format intermédiaire (non utilisé depuis la génération directe)
 

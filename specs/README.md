@@ -11,7 +11,7 @@ Pour le contexte produit (besoin, périmètre, contraintes légales) voir `requi
 | 00 | [`00-setup-projet.md`](./00-setup-projet.md) | — | Squelette Next.js 15, tooling, structure de dossiers |
 | 01 | [`01-resolution-source.md`](./01-resolution-source.md) | 00 | Résolution d'une URL de podcast en liste d'épisodes |
 | 02 | [`02-pipeline-media.md`](./02-pipeline-media.md) | 00 | Téléchargement, trim audio, recadrage image, waveform |
-| 03 | [`03-pack-builder-export.md`](./03-pack-builder-export.md) | 00, 02 | Assemblage du pack et export `.zip` |
+| 03 | [`03-pack-builder-export.md`](./03-pack-builder-export.md) | 00, 02 | Graphe STUdio (`story.json` + `assets/`) et export `.zip` |
 | 04 | [`04-ui-ux-parcours.md`](./04-ui-ux-parcours.md) | 00–03 (au moins en types/stubs) | Interface du parcours complet |
 | 05 | [`05-deploiement-coolify.md`](./05-deploiement-coolify.md) | 00–04 | Dockerfile, variables d'env, garde-fous anti-abus, runbook Coolify |
 

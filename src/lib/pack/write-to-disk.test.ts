@@ -77,11 +77,18 @@ describe("writePackToDisk", () => {
     expect(cover_?.homeTransition).toBeNull();
     expect(story?.image).toBeNull();
     expect(story?.audio).toBeTruthy();
-    expect(story?.okTransition).toBeNull();
+    expect(story?.okTransition).not.toBeNull();
+    expect(story?.homeTransition).toEqual(story?.okTransition);
 
-    expect(studioPack.actionNodes).toHaveLength(1);
-    expect(studioPack.actionNodes[0]?.options).toEqual([story?.uuid]);
-    expect(cover_?.okTransition?.actionNode).toBe(studioPack.actionNodes[0]?.id);
+    expect(studioPack.actionNodes).toHaveLength(2);
+    const toStory = studioPack.actionNodes.find(
+      (a) => a.id === cover_?.okTransition?.actionNode
+    );
+    const backToCover = studioPack.actionNodes.find(
+      (a) => a.id === story?.okTransition?.actionNode
+    );
+    expect(toStory?.options).toEqual([story?.uuid]);
+    expect(backToCover?.options).toEqual([pack.uuid]);
 
     // tous les fichiers référencés dans story.json existent bien dans assets/
     for (const node of studioPack.stageNodes) {
@@ -141,10 +148,12 @@ describe("writePackToDisk", () => {
     expect(stories).toHaveLength(2);
     stories.forEach((story, index) => {
       expect(story.image).toBeNull();
-      expect(story.homeTransition).toEqual({
+      const back = {
         actionNode: rootAction?.id,
         optionIndex: index,
-      });
+      };
+      expect(story.homeTransition).toEqual(back);
+      expect(story.okTransition).toEqual(back);
     });
   }, 30_000);
 

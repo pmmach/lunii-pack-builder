@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Lunii Pack Builder — contexte
 
-App web locale (mono-utilisateur) qui génère des packs d'histoires pour la Fabrique à histoires Lunii à partir d'une URL de podcast, au format attendu par [Lunii Admin Web](https://lunii-admin-web.pages.dev/).
+App web locale (mono-utilisateur) qui génère des packs d'histoires pour la Fabrique à histoires Lunii à partir d'une URL de podcast, au **format STUdio final** (`story.json` + `assets/` dans un `.zip`) importable dans [Lunii Admin Builder](https://lunii-admin-builder.pages.dev/) / [Lunii Admin Web](https://lunii-admin-web.pages.dev/).
 
 Avant toute implémentation, se référer à :
 - `requirements/` pour le besoin, le périmètre et les contraintes légales

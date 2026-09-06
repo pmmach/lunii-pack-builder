@@ -32,14 +32,14 @@ Depuis le cadrage, chaque phase ci-dessous est détaillée en spec d'implémenta
 
 ## Phase 3 — Pipeline média + pack simple (histoire unique)
 
-- Téléchargement audio, trim ffmpeg, recadrage image sharp, génération de waveform, suivi de progression
+- Téléchargement audio, trim ffmpeg (copie / ré-encodage rapide), recadrage image sharp, génération de waveform, suivi de progression (jobs pour la préparation, découpe synchrone)
 - `lib/pack/builder.ts` + `studio-format.ts` + `zip.ts` : génération directe du format STUdio final (`story.json` + `assets/`, cf. `requirements/02-format-pack-lunii.md`) + export `.zip`
 - Test end-to-end manuel : import du zip généré dans [Lunii Admin Builder](https://lunii-admin-builder.pages.dev/) → vérifier que l'import fonctionne et que le pack s'installe sur l'appareil
 
 ## Phase 4 — Parcours UI complet (édition audio visuelle + multi-histoires)
 
 - Intégration `wavesurfer.js` pour sélectionner visuellement le point de début/fin (remplace Audacity)
-- Atelier de pack : ajouter plusieurs épisodes, réordonner (`@dnd-kit`), supprimer, générer un pack multi-histoires
+- Atelier de pack : accordéon multi-histoires (étape édition), ajouter/réordonner (`@dnd-kit`)/supprimer, champ auteur, générer un pack multi-histoires
 - Design system dédié (couleurs, typographie, accessibilité, dark mode) — voir `specs/04-ui-ux-parcours.md`
 
 ## Phase 5 — Déploiement Coolify
@@ -50,6 +50,6 @@ Depuis le cadrage, chaque phase ci-dessous est détaillée en spec d'implémenta
 
 ## Phase 6 — Stretch goals (optionnel, à discuter)
 
-- ~~Génération directe du pack STUdio final~~ — fait dès la phase 3 (05/09/2026), après analyse d'un pack réel et du code source de [olup/lunii-admin-builder](https://github.com/olup/lunii-admin-builder). L'étape manuelle restante (import dans Lunii Admin Builder/Web pour écrire sur l'appareil via USB) est incompressible : notre app serveur n'a pas d'accès WebUSB au device.
-- Normalisation de volume audio automatique
+- ~~Génération directe du pack STUdio final~~ — fait dès la phase 3 (05/09/2026). Correctif fin de lecture `onEnd: "back"` (06/09/2026) pour éviter l'« erreur carte SD » après autoplay. L'étape manuelle restante (import dans Lunii Admin Builder/Web pour écrire sur l'appareil via USB) est incompressible.
+- ~~Normalisation de volume audio automatique~~ — écartée en v1 (podcasts déjà masterisés ; voir `requirements/02-format-pack-lunii.md`)
 - Persistance légère (SQLite) pour retrouver ses packs entre sessions
