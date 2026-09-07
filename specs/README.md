@@ -14,6 +14,7 @@ Pour le contexte produit (besoin, périmètre, contraintes légales) voir `requi
 | 03 | [`03-pack-builder-export.md`](./03-pack-builder-export.md) | 00, 02 | Graphe STUdio (`story.json` + `assets/`) et export `.zip` |
 | 04 | [`04-ui-ux-parcours.md`](./04-ui-ux-parcours.md) | 00–03 (au moins en types/stubs) | Interface du parcours complet |
 | 05 | [`05-deploiement-coolify.md`](./05-deploiement-coolify.md) | 00–04 | Dockerfile, variables d'env, garde-fous anti-abus, runbook Coolify |
+| 06 | [`06-edition-image-pack.md`](./06-edition-image-pack.md) | 02–04 | Édition de l'image du pack à l'étape "Pack" : reprise auto, import, choix parmi les histoires |
 
 Chaque spec est conçue pour être livrée et validée indépendamment (une session d'implémentation = une spec = idéalement une PR). Ne pas anticiper le contenu d'une spec suivante pendant l'implémentation d'une spec en cours.
 

@@ -1,4 +1,11 @@
+import {
+  clampTitleClipSeconds,
+  DEFAULT_TITLE_CLIP_SECONDS,
+} from "@/lib/pack/constants";
+import type { PackCoverSource } from "@/lib/pack/cover";
 import type { EpisodeMeta, SourceResolution } from "@/lib/sources/types";
+
+export type { PackCoverSource };
 
 export type WorkshopStep = 2 | 3 | 4;
 
@@ -22,6 +29,10 @@ export interface SessionState {
   packTitle: string;
   packAuthor: string;
   packDescription: string;
+  /** Image du pack : auto (1ère histoire), une histoire épinglée, ou un import. */
+  packCover: PackCoverSource;
+  /** Durée (s) de l'intro par défaut, commune à toutes les histoires du pack (0–30). */
+  defaultTitleClipSeconds: number;
   step: WorkshopStep;
   downloadUrl?: string;
   downloadSizeBytes?: number;
@@ -39,7 +50,14 @@ export function loadSession(sessionId: string): SessionState | null {
   const raw = sessionStorage.getItem(KEY_PREFIX + sessionId);
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as SessionState;
+    const parsed = JSON.parse(raw) as SessionState;
+    return {
+      ...parsed,
+      packCover: parsed.packCover ?? { type: "auto" },
+      defaultTitleClipSeconds: clampTitleClipSeconds(
+        parsed.defaultTitleClipSeconds ?? DEFAULT_TITLE_CLIP_SECONDS
+      ),
+    };
   } catch {
     return null;
   }

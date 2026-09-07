@@ -10,6 +10,11 @@ const nextConfig: NextConfig = {
       { protocol: "http", hostname: "**" },
     ],
   },
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "10mb",
+    },
+  },
   serverExternalPackages: [
     "fluent-ffmpeg",
     "@ffmpeg-installer/ffmpeg",

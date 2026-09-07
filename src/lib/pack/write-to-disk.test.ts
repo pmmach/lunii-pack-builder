@@ -157,6 +157,40 @@ describe("writePackToDisk", () => {
     });
   }, 30_000);
 
+  it("n'écrit pas d'intro audio quand defaultTitleClipSeconds = 0", async () => {
+    tmpDir = await mkdtemp(path.join(os.tmpdir(), "lunii-pack-"));
+    let pack = createPackDraft("sess", {
+      title: "Pack Sans Intro",
+      author: "Auteur Test",
+    });
+    pack = {
+      ...pack,
+      defaultTitleClipSeconds: 0,
+    };
+    pack = addStoryToPack(pack, {
+      id: "1",
+      title: "Première histoire",
+      storyAudioPath: audio,
+      coverImagePath: cover,
+    });
+
+    const result = await writePackToDisk(pack, tmpDir);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const assetFiles = await readdir(path.join(result.data.packDir, "assets"));
+    // cover + story uniquement (pas d'intro)
+    expect(assetFiles).toHaveLength(2);
+
+    const studioPack = JSON.parse(
+      await readFile(path.join(result.data.packDir, "story.json"), "utf-8")
+    ) as StudioPack;
+
+    const cover_ = studioPack.stageNodes.find((n) => n.type === "cover");
+    expect(cover_?.audio).toBeNull();
+    expect(cover_?.image).toBeTruthy();
+  }, 30_000);
+
   it("gère les collisions de noms de dossiers", async () => {
     tmpDir = await mkdtemp(path.join(os.tmpdir(), "lunii-pack-"));
     let pack1 = createPackDraft("s1", { title: "Même Titre", author: "A" });

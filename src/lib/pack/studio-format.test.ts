@@ -90,6 +90,49 @@ describe("buildStudioPack — 1 histoire", () => {
     const names = new Set(assets.map((a) => a.assetFileName));
     expect(names.size).toBe(3); // tous uniques
   });
+
+  it("utilise pack.coverImagePath sur le nœud cover si elle est définie", () => {
+    const packCover = path.join(
+      __dirname,
+      "..",
+      "media",
+      "__fixtures__",
+      "pack-other.jpg"
+    );
+    let pack = createPackDraft("sess", { title: "Pack", author: "Auteur" });
+    pack = addStoryToPack(pack, {
+      id: "1",
+      title: "Histoire",
+      storyAudioPath: audio,
+      coverImagePath: cover,
+      titleAudioPath: audio,
+    });
+    pack = { ...pack, coverImagePath: packCover };
+
+    const { studioPack, assets } = buildStudioPack(pack);
+    const coverNode = studioPack.stageNodes[0];
+    if (!coverNode) throw new Error("Noeud cover manquant");
+    const used = assets.find((a) => a.assetFileName === coverNode.image);
+    expect(used?.sourcePath).toBe(packCover);
+  });
+
+  it("retombe sur l'image de l'histoire si pack.coverImagePath est vide", () => {
+    let pack = createPackDraft("sess", { title: "Pack", author: "Auteur" });
+    pack = addStoryToPack(pack, {
+      id: "1",
+      title: "Histoire",
+      storyAudioPath: audio,
+      coverImagePath: cover,
+      titleAudioPath: audio,
+    });
+    pack = { ...pack, coverImagePath: "" };
+
+    const { studioPack, assets } = buildStudioPack(pack);
+    const coverNode = studioPack.stageNodes[0];
+    if (!coverNode) throw new Error("Noeud cover manquant");
+    const used = assets.find((a) => a.assetFileName === coverNode.image);
+    expect(used?.sourcePath).toBe(cover);
+  });
 });
 
 describe("buildStudioPack — plusieurs histoires", () => {

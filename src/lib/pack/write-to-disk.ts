@@ -4,7 +4,10 @@ import { probeDuration, trimAudio } from "@/lib/media/trim";
 import { err, ok, type Result } from "@/lib/shared/result";
 import { slugify } from "@/lib/shared/slugify";
 import { validatePackDraft } from "./builder";
-import { DEFAULT_TITLE_CLIP_SECONDS } from "./constants";
+import {
+  clampTitleClipSeconds,
+  DEFAULT_TITLE_CLIP_SECONDS,
+} from "./constants";
 import { buildStudioPack } from "./studio-format";
 import type { PackDraft, StoryDraft } from "./types";
 
@@ -26,21 +29,24 @@ async function uniqueDirName(
   }
 }
 
-/** Si l'histoire n'a pas d'extrait d'intro dédié, en génère un par défaut (8 premières secondes de story.mp3) dans tempDir. */
+/**
+ * Si l'histoire n'a pas d'extrait d'intro dédié, en génère un par défaut
+ * (N premières secondes de story.mp3) dans tempDir.
+ * Si clipSeconds <= 0, pas d'intro (undefined).
+ */
 async function resolveTitleAudioPath(
   story: StoryDraft,
-  tempDir: string
-): Promise<Result<string>> {
+  tempDir: string,
+  clipSeconds: number
+): Promise<Result<string | undefined>> {
   if (story.titleAudioPath) return ok(story.titleAudioPath);
+  if (clipSeconds <= 0) return ok(undefined);
 
   const durationResult = await probeDuration(story.storyAudioPath);
   const realDuration = durationResult.ok
     ? durationResult.data
-    : DEFAULT_TITLE_CLIP_SECONDS;
-  const endSeconds = Math.min(
-    DEFAULT_TITLE_CLIP_SECONDS,
-    Math.max(0.1, realDuration)
-  );
+    : clipSeconds;
+  const endSeconds = Math.min(clipSeconds, Math.max(0.1, realDuration));
 
   const generatedPath = path.join(tempDir, `${story.id}-title.mp3`);
   const clipped = await trimAudio(story.storyAudioPath, generatedPath, {
@@ -62,6 +68,9 @@ export async function writePackToDisk(
   const packSlug = await uniqueDirName(destDir, slugify(pack.title));
   const packDir = path.join(destDir, packSlug);
   const tempDir = path.join(destDir, `.tmp-${packSlug}`);
+  const clipSeconds = clampTitleClipSeconds(
+    pack.defaultTitleClipSeconds ?? DEFAULT_TITLE_CLIP_SECONDS
+  );
 
   try {
     await mkdir(path.join(packDir, "assets"), { recursive: true });
@@ -70,7 +79,11 @@ export async function writePackToDisk(
     const sorted = [...pack.stories].sort((a, b) => a.order - b.order);
     const resolvedStories: StoryDraft[] = [];
     for (const story of sorted) {
-      const titleAudioResult = await resolveTitleAudioPath(story, tempDir);
+      const titleAudioResult = await resolveTitleAudioPath(
+        story,
+        tempDir,
+        clipSeconds
+      );
       if (!titleAudioResult.ok) throw new Error(titleAudioResult.error);
       resolvedStories.push({
         ...story,

@@ -17,6 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { resolveSourceAction } from "@/lib/actions/resolve-source";
+import { DEFAULT_TITLE_CLIP_SECONDS } from "@/lib/pack/constants";
 import { saveSession } from "@/lib/session/client-store";
 
 function isValidHttpUrl(value: string): boolean {
@@ -64,6 +65,8 @@ export default function HomePage() {
         packTitle: source.showTitle,
         packAuthor: source.showAuthor ?? "",
         packDescription: "",
+        packCover: { type: "auto" },
+        defaultTitleClipSeconds: DEFAULT_TITLE_CLIP_SECONDS,
         step,
       });
       router.push(`/pack/${sessionId}`);

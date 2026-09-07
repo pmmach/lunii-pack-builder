@@ -15,5 +15,7 @@ export interface PackDraft {
   description?: string;
   coverImagePath: string;
   titleAudioPath?: string;
+  /** Durée (s) de l'intro par défaut pour toutes les histoires sans titleAudioPath. 0 = pas d'intro. Défaut : 8. */
+  defaultTitleClipSeconds?: number;
   stories: StoryDraft[];
 }

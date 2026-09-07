@@ -144,7 +144,7 @@ export function buildStudioPack(pack: PackDraft): {
 
     stageNodes.push({
       uuid: packUuid,
-      image: registerAsset(story.coverImagePath),
+      image: registerAsset(pack.coverImagePath || story.coverImagePath),
       audio: registerOptionalAsset(story.titleAudioPath),
       type: "cover",
       name: packUuid,

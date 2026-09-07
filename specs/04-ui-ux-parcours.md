@@ -68,6 +68,10 @@ Si `kind === "episode"` : cette étape est sautée, l'unique épisode passe dire
 
 Sous-étapes affichées dans un **Accordion** shadcn (`src/components/ui/accordion.tsx`, Base UI) — **un seul panneau ouvert à la fois** (pas de barre d'onglets : les titres longs Radio France provoquaient chevauchements/troncatures).
 
+**Réglage commun au pack** (au-dessus de l'accordéon) :
+- Slider « Durée de l'intro » (0–30 s, pas de 1 s, défaut 8) — valeur portée sur **toutes** les histoires du pack (`SessionState.defaultTitleClipSeconds` → `PackDraft.defaultTitleClipSeconds` à l'export)
+- Texte d'aide : extrait joué à la sélection, pris au début du contenu découpé ; 0 s = pas d'intro
+
 En-tête de chaque item :
 - badge `n/N`
 - titre **complet** (wrap autorisé, pas de `slice`)
@@ -81,11 +85,11 @@ Le premier épisode de la sélection est ouvert par défaut (`openStoryId`).
 Pour chaque histoire :
 
 1. **Titre** : `Input` pré-rempli avec le titre de l'épisode, éditable
-2. **Audio** : lecteur avec waveform (`wavesurfer.js`, région de sélection draggable) affichant les peaks retournés par `generateWaveformPeaks` ; poignées début/fin de l'histoire ; texte d'aide : intro par défaut = 8 premières secondes si aucun extrait dédié
+2. **Audio** : lecteur avec waveform (`wavesurfer.js`, région de sélection draggable) affichant les peaks retournés par `generateWaveformPeaks` ; poignées début/fin de l'histoire ; texte d'aide rappelant la durée d'intro du pack (« Intro : N s (réglage commun au pack) »)
 3. **Image** : aperçu carré 320x320 de la vignette (alt descriptif si image présente)
 4. **Progression** pendant les traitements serveur :
-   - **Préparation** (téléchargement + vignette + waveform) : `Progress` shadcn liée au polling de `getJobStatusAction` (intervalle 1s). Plusieurs épisodes sélectionnés sont préparés en **parallèle** (borné par `MAX_CONCURRENT_JOBS` côté serveur)
-   - **Validation / découpe** : appel synchrone à `trimEpisodeAction` (pas de job) ; plusieurs découpes en parallèle si multi-histoires
+   - **Préparation** (téléchargement + conversion MP3 si besoin + vignette + waveform) : `Progress` shadcn liée au polling de `getJobStatusAction` (intervalle 1s). Plusieurs épisodes sélectionnés sont préparés en **parallèle** (borné par `MAX_CONCURRENT_JOBS` côté serveur)
+   - **Validation / découpe** : appel synchrone à `trimEpisodeAction` sur `source.mp3` (copie de flux, quasi instantanée) ; plusieurs découpes en parallèle si multi-histoires
    - **Export** : messages "Assemblage…", "Compression…"
    - À chaque grande étape (`busy === true`) : recentrage sur la carte de progression (`scrollIntoView`)
    - Pourcentage animé / lissé (plafonné à 97 % avant la fin réelle), avec `message` et `%` visibles

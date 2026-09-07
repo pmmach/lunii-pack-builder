@@ -3,6 +3,7 @@ import ffprobeInstaller from "@ffprobe-installer/ffprobe";
 import ffmpeg from "fluent-ffmpeg";
 import path from "node:path";
 import { copyFile, unlink } from "node:fs/promises";
+import { debugMedia } from "@/lib/shared/debug-media";
 import { err, ok, type Result } from "@/lib/shared/result";
 import type { AudioProcessResult, TrimOptions } from "./types";
 
@@ -33,6 +34,7 @@ export async function trimAudio(
 
   const duration = opts.endSeconds - opts.startSeconds;
   const sourceIsMp3 = path.extname(inputPath).toLowerCase() === ".mp3";
+  const t0 = Date.now();
 
   if (sourceIsMp3 && opts.startSeconds <= FULL_FILE_START_EPS) {
     const probed = await probeDuration(inputPath);
@@ -42,6 +44,11 @@ export async function trimAudio(
           await copyFile(inputPath, outputPath);
         }
         onProgress?.(100);
+        debugMedia("trim:copy", {
+          mode: "full-mp3-copy",
+          durationSec: Math.round(probed.data * 10) / 10,
+          ms: Date.now() - t0,
+        });
         return ok({
           filePath: outputPath,
           durationSeconds: probed.data,
@@ -51,6 +58,15 @@ export async function trimAudio(
       }
     }
   }
+
+  const mode = sourceIsMp3 ? "mp3-stream-copy" : "reencode-mp3";
+  debugMedia("trim:ffmpeg-start", {
+    mode,
+    startSec: Math.round(opts.startSeconds * 10) / 10,
+    endSec: Math.round(opts.endSeconds * 10) / 10,
+    durationSec: Math.round(duration * 10) / 10,
+    ext: path.extname(inputPath).toLowerCase() || "(none)",
+  });
 
   try {
     await new Promise<void>((resolve, reject) => {
@@ -92,11 +108,20 @@ export async function trimAudio(
         .run();
     });
 
+    debugMedia("trim:ffmpeg-ok", {
+      mode,
+      durationSec: Math.round(duration * 10) / 10,
+      ms: Date.now() - t0,
+    });
     return ok({
       filePath: outputPath,
       durationSeconds: duration,
     });
   } catch {
+    debugMedia("trim:ffmpeg-error", {
+      mode,
+      ms: Date.now() - t0,
+    });
     await unlink(outputPath).catch(() => undefined);
     return err("Le traitement audio a échoué", "FFMPEG_ERROR");
   }
@@ -126,3 +151,46 @@ export async function probeDuration(
     return err("Impossible de lire la durée audio", "FFPROBE_ERROR");
   }
 }
+
+/**
+ * Garantit un fichier MP3 prêt pour une découpe rapide (stream copy).
+ * - Source déjà MP3 → copie (ou no-op si chemins identiques)
+ * - Autre format (m4a…) → ré-encodage libmp3lame une seule fois
+ */
+export async function ensureMp3(
+  inputPath: string,
+  outputPath: string,
+  onProgress?: (percent: number) => void
+): Promise<Result<AudioProcessResult>> {
+  const probed = await probeDuration(inputPath);
+  if (!probed.ok) return probed;
+
+  const samePath =
+    path.resolve(inputPath) === path.resolve(outputPath);
+  if (
+    samePath &&
+    path.extname(inputPath).toLowerCase() === ".mp3"
+  ) {
+    onProgress?.(100);
+    debugMedia("ensureMp3:skip", {
+      mode: "already-mp3",
+      durationSec: Math.round(probed.data * 10) / 10,
+    });
+    return ok({
+      filePath: outputPath,
+      durationSeconds: probed.data,
+    });
+  }
+
+  debugMedia("ensureMp3:start", {
+    ext: path.extname(inputPath).toLowerCase() || "(none)",
+    durationSec: Math.round(probed.data * 10) / 10,
+  });
+  return trimAudio(
+    inputPath,
+    outputPath,
+    { startSeconds: 0, endSeconds: probed.data },
+    onProgress
+  );
+}
+

@@ -3,12 +3,23 @@ import { mkdir, unlink } from "node:fs/promises";
 import path from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { debugMedia, safeHost } from "@/lib/shared/debug-media";
 import { env } from "@/lib/shared/env";
 import { err, ok, type Result } from "@/lib/shared/result";
 import { assertSafeUrl } from "@/lib/sources/url-guard";
 import type { DownloadResult } from "./types";
 
-const DOWNLOAD_TIMEOUT_MS = 60_000;
+/** Timeout images : plus court (fichiers petits). Audio : env.DOWNLOAD_TIMEOUT_MS. */
+const IMAGE_DOWNLOAD_TIMEOUT_MS = 60_000;
+
+function isAbortError(e: unknown): boolean {
+  if (!(e instanceof Error)) return false;
+  return (
+    e.name === "AbortError" ||
+    e.message.includes("aborted") ||
+    e.message.includes("AbortError")
+  );
+}
 
 export async function downloadToWorkspace(
   url: string,
@@ -18,13 +29,24 @@ export async function downloadToWorkspace(
   const safe = await assertSafeUrl(url);
   if (!safe.ok) return safe;
 
+  const host = safeHost(safe.data.toString());
+  const timeoutMs =
+    kind === "audio" ? env.DOWNLOAD_TIMEOUT_MS : IMAGE_DOWNLOAD_TIMEOUT_MS;
+  const t0 = Date.now();
+  debugMedia("download:start", { kind, host, timeoutMs });
+
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS);
+  let timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const bumpTimeout = () => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => controller.abort(), timeoutMs);
+  };
 
   try {
     const response = await fetch(safe.data.toString(), {
       signal: controller.signal,
       redirect: "follow",
+      cache: "no-store",
       headers: {
         "User-Agent":
           "LuniiPackBuilder/0.1 (+https://github.com/pmmach/lunii-pack-builder)",
@@ -32,6 +54,12 @@ export async function downloadToWorkspace(
     });
 
     if (!response.ok) {
+      debugMedia("download:http-error", {
+        kind,
+        host,
+        status: response.status,
+        ms: Date.now() - t0,
+      });
       return err(
         `Téléchargement échoué (${response.status})`,
         "HTTP_ERROR"
@@ -81,6 +109,8 @@ export async function downloadToWorkspace(
     const counter = new Transform({
       transform(chunk, _enc, cb) {
         downloaded += (chunk as Buffer).length;
+        // Relance le timeout tant que des octets arrivent (stall vs durée totale).
+        bumpTimeout();
         if (downloaded > maxBytes) {
           cb(new Error("FILE_TOO_LARGE"));
           return;
@@ -96,18 +126,47 @@ export async function downloadToWorkspace(
       if (e instanceof Error && e.message === "FILE_TOO_LARGE") {
         return err("Fichier trop volumineux", "FILE_TOO_LARGE");
       }
+      if (isAbortError(e) || controller.signal.aborted) {
+        debugMedia("download:timeout", {
+          kind,
+          host,
+          ms: Date.now() - t0,
+          limitMs: timeoutMs,
+          bytes: downloaded,
+        });
+        return err("Délai dépassé lors du téléchargement", "TIMEOUT");
+      }
+      debugMedia("download:stream-error", {
+        kind,
+        host,
+        ms: Date.now() - t0,
+        bytes: downloaded,
+      });
       return err("Échec du téléchargement", "DOWNLOAD_FAILED");
     }
 
+    debugMedia("download:ok", {
+      kind,
+      host,
+      bytes: downloaded,
+      ms: Date.now() - t0,
+    });
     return ok({
       filePath: destPath,
       mimeType: mimeType || (kind === "audio" ? "audio/mpeg" : "image/jpeg"),
       sizeBytes: downloaded,
     });
   } catch (e) {
-    if (e instanceof Error && e.name === "AbortError") {
+    if (isAbortError(e) || controller.signal.aborted) {
+      debugMedia("download:timeout", {
+        kind,
+        host,
+        ms: Date.now() - t0,
+        limitMs: timeoutMs,
+      });
       return err("Délai dépassé lors du téléchargement", "TIMEOUT");
     }
+    debugMedia("download:failed", { kind, host, ms: Date.now() - t0 });
     return err("Impossible de télécharger le fichier", "DOWNLOAD_FAILED");
   } finally {
     clearTimeout(timeout);

@@ -16,7 +16,8 @@ workspace/<sessionId>/
     audio.<ext>          # audio brut téléchargé
     cover.<ext>           # image brute téléchargée
   processed/<episodeId>/
-    story.mp3              # audio final après trim
+    source.mp3             # audio normalisé MP3 (conversion unique à la préparation)
+    story.mp3              # audio final après trim (copie de flux depuis source.mp3)
     title.mp3               # extrait "intro" (voir spec 03 pour la règle par défaut)
     cover.jpg               # image recadrée 320x320
 ```
@@ -67,7 +68,7 @@ export async function downloadToWorkspace(
 - Stream la réponse directement sur disque (`fs.createWriteStream` + `Readable.fromWeb(response.body).pipe(...)`), jamais de buffer complet en mémoire
 - Vérifie le `Content-Type` de la réponse : doit commencer par `audio/` (kind `"audio"`) ou `image/` (kind `"image"`) — sinon `err("Le fichier distant n'est pas au format attendu", "INVALID_CONTENT_TYPE")`
 - Applique une limite de taille (`env.MAX_DOWNLOAD_MB`) : si dépassée pendant le stream, annule et supprime le fichier partiel, retourne `err("Fichier trop volumineux", "FILE_TOO_LARGE")`
-- Timeout global de téléchargement : 60s
+- Timeout d'inactivité : `env.DOWNLOAD_TIMEOUT_MS` (défaut 300s) pour l'audio, 60s pour les images ; le timer est **relancé à chaque chunk** reçu (un gros fichier lent mais progressant ne timeout pas) ; si le flux reste silencieux trop longtemps → `err("Délai dépassé lors du téléchargement", "TIMEOUT")`
 
 ### `src/lib/media/trim.ts`
 
@@ -78,6 +79,14 @@ export async function trimAudio(
   opts: TrimOptions,
   onProgress?: (percent: number) => void
 ): Promise<Result<AudioProcessResult>>;
+
+export async function ensureMp3(
+  inputPath: string,
+  outputPath: string,
+  onProgress?: (percent: number) => void
+): Promise<Result<AudioProcessResult>>;
+
+export async function probeDuration(inputPath: string): Promise<Result<number>>;
 ```
 
 - Utilise `fluent-ffmpeg` (binaire fourni par `@ffmpeg-installer/ffmpeg`, à enregistrer via `ffmpeg.setFfmpegPath(...)`)
@@ -87,6 +96,7 @@ export async function trimAudio(
   1. **Source déjà `.mp3` + plage ≈ fichier entier** (`start ≈ 0`, `end ≈ durée probe`, tolérances `0.05s` / `0.2s`) → `copyFile` vers `outputPath` (aucun ffmpeg)
   2. **Source déjà `.mp3` + découpe réelle** → ffmpeg en **copie de flux** (`-c:a copy`) avec seek en entrée (`.seekInput(start)` + `.setDuration(durée)`) — coupe à la trame MP3 (~26 ms), largement suffisant pour un podcast
   3. **Autre format** (ex. `.m4a`) → ré-encodage `libmp3lame`, 44.1 kHz, 128 kbps, `-compression_level 0` (mode rapide)
+- `ensureMp3` : garantit un MP3 prêt pour découpe rapide — copie si source déjà MP3, sinon ré-encodage **une seule fois** (utilisé à la préparation vers `processed/<episodeId>/source.mp3`)
 - `onProgress` branché sur l'event `progress` de fluent-ffmpeg quand un encodage/copie de flux a lieu (pourcentage estimé à partir de `timemark` / durée cible)
 - En cas d'échec ffmpeg (code retour non nul) → `err("Le traitement audio a échoué", "FFMPEG_ERROR")`, ne jamais laisser de fichier de sortie partiel (supprimer si présent)
 
@@ -154,15 +164,15 @@ export async function trimEpisodeAction(sessionId: string, episodeId: string, op
 export async function cropEpisodeCoverAction(sessionId: string, episodeId: string, focus?: { x: number; y: number }): Promise<Result<{ path: string }>>;
 ```
 
-- `prepareEpisodeAction` : crée un job, lance en arrière-plan (sans bloquer la réponse) : vérifie `episode.durationSeconds` contre `env.MAX_EPISODE_DURATION_SECONDS` (sinon `err(..., "EPISODE_TOO_LONG")` immédiat sans créer de job) → télécharge audio + image → recadre la vignette → génère la waveform → `updateJob` à chaque étape avec un `message` explicite → statut final `"done"` avec le chemin des fichiers dans `resultRef` (JSON stringifié) ou `"error"`
-- **Pas de ré-encodage / trim dans `prepareEpisodeAction`** : le fichier `story.mp3` n'est produit qu'à la validation via `trimEpisodeAction`. Dans le `resultRef`, `storyPath` pointe temporairement sur l'audio source (fallback UI uniquement)
-- `trimEpisodeAction` : **synchrone** (attend la fin du traitement et renvoie directement `{ storyPath, durationSeconds }`, pas de `jobId` / polling). Enveloppée dans `withConcurrencyLimit`. L'UI peut lancer plusieurs découpes en parallèle (`Promise.all`) ; le sémaphore borne la charge réelle
+- `prepareEpisodeAction` : crée un job, lance en arrière-plan (sans bloquer la réponse) : vérifie `episode.durationSeconds` contre `env.MAX_EPISODE_DURATION_SECONDS` (sinon `err(..., "EPISODE_TOO_LONG")` immédiat sans créer de job) → télécharge audio → **`ensureMp3` vers `processed/<episodeId>/source.mp3`** (conversion unique si besoin) → image + vignette → waveform sur le MP3 → `updateJob` à chaque étape avec un `message` explicite → statut final `"done"` avec le chemin des fichiers dans `resultRef` (JSON stringifié, `audioPath`/`storyPath` = `source.mp3`, + `durationSeconds`) ou `"error"`
+- **Le ré-encodage lourd (m4a→mp3) a lieu à la préparation**, pas à la validation : `story.mp3` est ensuite produit par `trimEpisodeAction` en copie de flux depuis `source.mp3` (quasi instantané)
+- `trimEpisodeAction` : **synchrone** (attend la fin du traitement et renvoie directement `{ storyPath, durationSeconds }`, pas de `jobId` / polling). Préfère `processed/.../source.mp3` s'il existe, sinon retombe sur `source/.../audio.*`. Enveloppée dans `withConcurrencyLimit`. L'UI peut lancer plusieurs découpes en parallèle (`Promise.all`) ; le sémaphore borne la charge réelle
 - `prepareEpisodeAction` : le tout est enveloppé dans `withConcurrencyLimit` ; l'UI lance aussi plusieurs préparations en parallèle pour une sélection multi-épisodes
 
 ## Tests
 
 - Fixtures : committer un mp3 de test très court (~2s, silence ou bip généré une fois avec ffmpeg et versionné) et une petite image JPEG dans `src/lib/media/__fixtures__/`
-- `trim.test.ts` : découpe la fixture sur une plage valide → vérifie que le fichier de sortie existe et a une durée proche de la plage demandée (tolérance ±0.2s) ; plage invalide → erreur `INVALID_TRIM_RANGE` ; plage couvrant tout un MP3 → copie (durée inchangée)
+- `trim.test.ts` : découpe la fixture sur une plage valide → vérifie que le fichier de sortie existe et a une durée proche de la plage demandée (tolérance ±0.2s) ; plage invalide → erreur `INVALID_TRIM_RANGE` ; plage couvrant tout un MP3 → copie (durée inchangée) ; `ensureMp3` sur la fixture MP3 → produit un MP3 de même durée
 - `image.test.ts` : recadre la fixture → vérifie via `sharp(output).metadata()` que la sortie fait bien 320x320 et est un JPEG
 - `waveform.test.ts` : génère 50 points sur la fixture → vérifie la longueur du tableau et que toutes les valeurs sont dans `[0, 1]`
 - `download.test.ts` : mocker `fetch` pour simuler un `Content-Type` invalide → vérifie `INVALID_CONTENT_TYPE` ; simuler un flux dépassant `MAX_DOWNLOAD_MB` → vérifie `FILE_TOO_LARGE` et l'absence de fichier partiel résiduel

@@ -59,6 +59,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import { exportPackAction } from "@/lib/actions/export-pack";
 import {
@@ -66,6 +67,13 @@ import {
   prepareEpisodeAction,
   trimEpisodeAction,
 } from "@/lib/actions/media";
+import { PackCoverEditor } from "@/components/pack-cover-editor";
+import {
+  clampTitleClipSeconds,
+  DEFAULT_TITLE_CLIP_SECONDS,
+  MAX_TITLE_CLIP_SECONDS,
+} from "@/lib/pack/constants";
+import { resolvePackCoverImagePath } from "@/lib/pack/cover";
 import {
   addStoryToPack,
   createPackDraft,
@@ -91,6 +99,63 @@ type Draft = {
   coverPath: string;
   duration: number;
 };
+
+function readSliderSeconds(next: number | readonly number[]): number {
+  const raw = Array.isArray(next) ? next[0] : next;
+  return clampTitleClipSeconds(
+    typeof raw === "number" ? raw : DEFAULT_TITLE_CLIP_SECONDS
+  );
+}
+
+function IntroDurationSlider({
+  value,
+  disabled,
+  onCommit,
+}: {
+  value: number;
+  disabled?: boolean;
+  onCommit: (seconds: number) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  return (
+    <div className="bg-card space-y-3 rounded-xl border p-4">
+      <div className="flex items-baseline justify-between gap-3">
+        <Label htmlFor="intro-duration">Durée de l&apos;intro</Label>
+        <span
+          id="intro-duration-value"
+          className="text-muted-foreground text-sm tabular-nums"
+        >
+          {draft} s
+        </span>
+      </div>
+      <Slider
+        id="intro-duration"
+        min={0}
+        max={MAX_TITLE_CLIP_SECONDS}
+        step={1}
+        disabled={disabled}
+        value={draft}
+        onValueChange={(next) => setDraft(readSliderSeconds(next))}
+        onValueCommitted={(next) => {
+          const seconds = readSliderSeconds(next);
+          setDraft(seconds);
+          if (seconds !== value) onCommit(seconds);
+        }}
+        aria-valuetext={`${draft} secondes`}
+        aria-describedby="intro-duration-help"
+      />
+      <p id="intro-duration-help" className="text-muted-foreground text-xs">
+        Extrait joué à la sélection de chaque histoire, pris au début du
+        contenu découpé. 0 s = pas d&apos;intro.
+      </p>
+    </div>
+  );
+}
 
 function SortableStoryItem({
   story,
@@ -261,6 +326,23 @@ export default function PackWorkshopPage() {
     saveSession(next);
   }, []);
 
+  useEffect(() => {
+    if (!state || state.packCover?.type !== "story") return;
+    const resolved = resolvePackCoverImagePath(
+      state.packCover,
+      state.stories.map((s) => ({
+        id: s.episode.id,
+        coverImagePath: s.coverImagePath,
+      }))
+    );
+    if (resolved.effectiveSource.type === "auto") {
+      persist({ ...state, packCover: { type: "auto" } });
+      toast(
+        "L'histoire utilisée comme image du pack a été retirée : image automatique réappliquée."
+      );
+    }
+  }, [persist, state]);
+
   const episodes = useMemo(
     () => state?.source.episodes ?? [],
     [state?.source.episodes]
@@ -344,6 +426,7 @@ export default function PackWorkshopPage() {
                 storyPath: string;
                 coverPath?: string;
                 peaks: number[];
+                durationSeconds?: number;
               })
             : null;
           if (!ref?.coverPath) {
@@ -354,9 +437,11 @@ export default function PackWorkshopPage() {
           }
 
           const duration =
-            ep.durationSeconds && ep.durationSeconds > 0
-              ? ep.durationSeconds
-              : 30;
+            ref.durationSeconds && ref.durationSeconds > 0
+              ? ref.durationSeconds
+              : ep.durationSeconds && ep.durationSeconds > 0
+                ? ep.durationSeconds
+                : 30;
 
           drafts[ep.id] = {
             title: ep.title,
@@ -372,7 +457,8 @@ export default function PackWorkshopPage() {
 
         setDraftStories(drafts);
         setOpenStoryId(selected[0]?.id ?? "");
-        persist({ ...current, step: 3 });
+        const latest = loadSession(sessionId) ?? current;
+        persist({ ...latest, step: 3 });
         return true;
       } finally {
         setBusy(false);
@@ -383,14 +469,19 @@ export default function PackWorkshopPage() {
     [persist, sessionId]
   );
 
-  // Auto-préparer si on arrive directement en étape 3 (épisode unique)
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  // Auto-préparer si on arrive directement en étape 3 (épisode unique).
+  // Ne pas relancer à chaque persist (slider) : ça retélécharge et abort.
   useEffect(() => {
-    if (!state || autoPrepared.current) return;
-    if (state.step === 3 && Object.keys(draftStories).length === 0) {
+    const current = stateRef.current;
+    if (!current || autoPrepared.current) return;
+    if (current.step === 3 && Object.keys(draftStories).length === 0) {
       autoPrepared.current = true;
-      void prepareSelected(state);
+      void prepareSelected(current);
     }
-  }, [state, draftStories, prepareSelected]);
+  }, [state?.step, draftStories, prepareSelected]);
 
   function toggleEpisode(id: string) {
     if (!state) return;
@@ -429,12 +520,30 @@ export default function PackWorkshopPage() {
       );
       setProgress(20);
 
+      // Progression UI pendant les trims parallèles (sinon la barre reste figée
+      // pendant 1–2 min sur un ré-encodage m4a→mp3).
+      const trimProgress = new Map<string, number>();
+      for (const t of targets) trimProgress.set(t.epId, 0);
+      const refreshTrimProgress = () => {
+        const values = [...trimProgress.values()];
+        const avg =
+          values.reduce((a, b) => a + b, 0) / Math.max(1, values.length);
+        setProgress(20 + Math.round(avg * 0.7));
+      };
+
       const results = await Promise.all(
         targets.map(async ({ epId, draft, ep }) => {
+          setProgressMsg(
+            targets.length > 1
+              ? `Découpe (${targets.length} épisodes)…`
+              : `Découpe : ${draft.title}`
+          );
           const trim = await trimEpisodeAction(sessionId, epId, {
             startSeconds: draft.start,
             endSeconds: draft.end,
           });
+          trimProgress.set(epId, 100);
+          refreshTrimProgress();
           return { epId, draft, ep, trim };
         })
       );
@@ -481,6 +590,12 @@ export default function PackWorkshopPage() {
         author: state.packAuthor,
         description: state.packDescription,
       });
+      pack = {
+        ...pack,
+        defaultTitleClipSeconds: clampTitleClipSeconds(
+          state.defaultTitleClipSeconds ?? DEFAULT_TITLE_CLIP_SECONDS
+        ),
+      };
       for (const s of state.stories) {
         pack = addStoryToPack(pack, {
           id: s.episode.id,
@@ -490,6 +605,14 @@ export default function PackWorkshopPage() {
           titleAudioPath: s.titleAudioPath,
         });
       }
+      const resolvedCover = resolvePackCoverImagePath(
+        state.packCover ?? { type: "auto" },
+        state.stories.map((s) => ({
+          id: s.episode.id,
+          coverImagePath: s.coverImagePath,
+        }))
+      );
+      pack = { ...pack, coverImagePath: resolvedCover.path };
 
       const clientValidation = validatePackDraftClient(pack);
       if (!clientValidation.ok) {
@@ -539,6 +662,9 @@ export default function PackWorkshopPage() {
   }
 
   const step = state.step;
+  const introSeconds = clampTitleClipSeconds(
+    state.defaultTitleClipSeconds ?? DEFAULT_TITLE_CLIP_SECONDS
+  );
 
   return (
     <div className="min-h-screen bg-background">
@@ -669,7 +795,10 @@ export default function PackWorkshopPage() {
             <Button
               className="bg-accent text-accent-foreground hover:bg-accent/90 min-h-11"
               disabled={state.selectedEpisodeIds.length === 0 || busy}
-              onClick={() => void prepareSelected(state)}
+              onClick={() => {
+                autoPrepared.current = true;
+                void prepareSelected(state);
+              }}
             >
               Continuer avec {state.selectedEpisodeIds.length} histoire(s)
             </Button>
@@ -686,6 +815,13 @@ export default function PackWorkshopPage() {
                 ajuster le titre et le découpage audio.
               </p>
             </div>
+            <IntroDurationSlider
+              value={introSeconds}
+              disabled={busy}
+              onCommit={(seconds) =>
+                persist({ ...state, defaultTitleClipSeconds: seconds })
+              }
+            />
             {Object.keys(draftStories).length === 0 ? (
               <Skeleton className="h-48 w-full" />
             ) : (
@@ -772,8 +908,11 @@ export default function PackWorkshopPage() {
                                 }
                               />
                               <p className="text-muted-foreground text-xs">
-                                Intro par défaut : 8 premières secondes si aucun
-                                extrait dédié n&apos;est fourni.
+                                Intro : {introSeconds} s (réglage commun au pack)
+                                {introSeconds === 0
+                                  ? " — aucune intro audio"
+                                  : ""}
+                                .
                               </p>
                             </div>
                             <div className="space-y-2">
@@ -818,6 +957,12 @@ export default function PackWorkshopPage() {
         {step === 4 && (
           <section className="space-y-4">
             <h1 className="text-2xl font-bold">Composition du pack</h1>
+            <PackCoverEditor
+              sessionId={sessionId}
+              stories={state.stories}
+              packCover={state.packCover ?? { type: "auto" }}
+              onChange={(packCover) => persist({ ...state, packCover })}
+            />
             <div className="space-y-2">
               <Label htmlFor="pack-title">Titre du pack</Label>
               <Input

@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { probeDuration, trimAudio } from "./trim";
+import { ensureMp3, probeDuration, trimAudio } from "./trim";
 
 const fixture = path.join(__dirname, "__fixtures__", "sample.mp3");
 let tmpDir: string;
@@ -58,5 +58,24 @@ describe("trimAudio", () => {
     });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.code).toBe("INVALID_TRIM_RANGE");
+  });
+});
+
+describe("ensureMp3", () => {
+  it("copie une source déjà MP3 vers la destination", async () => {
+    tmpDir = await mkdtemp(path.join(os.tmpdir(), "lunii-ensure-"));
+    const out = path.join(tmpDir, "source.mp3");
+    const sourceDuration = await probeDuration(fixture);
+    expect(sourceDuration.ok).toBe(true);
+    if (!sourceDuration.ok) return;
+
+    const result = await ensureMp3(fixture, out);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const probed = await probeDuration(out);
+    expect(probed.ok).toBe(true);
+    if (!probed.ok) return;
+    expect(Math.abs(probed.data - sourceDuration.data)).toBeLessThan(0.05);
   });
 });
