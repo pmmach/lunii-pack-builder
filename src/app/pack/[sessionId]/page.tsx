@@ -100,6 +100,113 @@ type Draft = {
   duration: number;
 };
 
+type PreparePhase = "idle" | "running" | "error";
+
+function PrepareCorridor({
+  storyCount,
+  phase,
+  progress,
+  message,
+  error,
+  canChangeSelection,
+  onCancel,
+  onRetry,
+  onBackToSelection,
+  onChangeUrl,
+}: {
+  storyCount: number;
+  phase: PreparePhase;
+  progress: number;
+  message: string;
+  error: string | null;
+  canChangeSelection: boolean;
+  onCancel: () => void;
+  onRetry: () => void;
+  onBackToSelection: () => void;
+  onChangeUrl: () => void;
+}) {
+  const countLabel =
+    storyCount > 1 ? `${storyCount} histoires` : "1 histoire";
+  const isError = phase === "error";
+
+  return (
+    <Card className="border-primary/40">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-xl">
+          {!isError ? (
+            <Loader2
+              className="size-5 shrink-0 animate-spin motion-reduce:animate-none"
+              aria-hidden
+            />
+          ) : null}
+          {isError
+            ? "Préparation interrompue"
+            : `Préparation de ${countLabel}`}
+        </CardTitle>
+        <CardDescription>
+          {isError
+            ? "Les fichiers n'ont pas pu être préparés. Tu peux réessayer sans perdre ta sélection."
+            : "Téléchargement et conversion des fichiers. L'édition s'ouvrira ensuite."}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {isError ? (
+          <>
+            <Alert variant="destructive">
+              <AlertTitle>Échec de la préparation</AlertTitle>
+              <AlertDescription>
+                {error ?? "Une erreur est survenue."}
+              </AlertDescription>
+            </Alert>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                className="bg-accent text-accent-foreground hover:bg-accent/90 min-h-11"
+                onClick={onRetry}
+              >
+                Réessayer
+              </Button>
+              {canChangeSelection ? (
+                <Button
+                  variant="outline"
+                  className="min-h-11"
+                  onClick={onBackToSelection}
+                >
+                  Modifier la sélection
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  className="min-h-11"
+                  onClick={onChangeUrl}
+                >
+                  Changer d&apos;URL
+                </Button>
+              )}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="space-y-2" aria-busy="true" aria-live="polite">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-muted-foreground text-sm">
+                  {message || "Préparation des fichiers…"}
+                </p>
+                <span className="text-muted-foreground text-sm font-medium tabular-nums">
+                  {progress}%
+                </span>
+              </div>
+              <Progress value={progress} />
+            </div>
+            <Button variant="outline" className="min-h-11" onClick={onCancel}>
+              Annuler
+            </Button>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function readSliderSeconds(next: number | readonly number[]): number {
   const raw = Array.isArray(next) ? next[0] : next;
   return clampTitleClipSeconds(
@@ -263,10 +370,20 @@ function useAnimatedProgress(rawProgress: number, active: boolean): number {
 
 async function waitJob(
   jobId: string,
-  onProgress?: (p: number, msg?: string) => void
-): Promise<{ ok: true; resultRef?: string } | { ok: false; error: string }> {
+  onProgress?: (p: number, msg?: string) => void,
+  isCancelled?: () => boolean
+): Promise<
+  | { ok: true; resultRef?: string }
+  | { ok: false; error: string; cancelled?: boolean }
+> {
   for (let i = 0; i < 180; i++) {
+    if (isCancelled?.()) {
+      return { ok: false, error: "cancelled", cancelled: true };
+    }
     const status = await getJobStatusAction(jobId);
+    if (isCancelled?.()) {
+      return { ok: false, error: "cancelled", cancelled: true };
+    }
     if (!status.ok) return { ok: false, error: status.error };
     onProgress?.(status.data.progress, status.data.message);
     if (status.data.status === "done") {
@@ -295,9 +412,15 @@ export default function PackWorkshopPage() {
   const [openStoryId, setOpenStoryId] = useState<string>("");
   const [draftStories, setDraftStories] = useState<Record<string, Draft>>({});
   const [removeId, setRemoveId] = useState<string | null>(null);
+  const [preparePhase, setPreparePhase] = useState<PreparePhase>("idle");
+  const [prepareError, setPrepareError] = useState<string | null>(null);
   const autoPrepared = useRef(false);
+  const cancelledRef = useRef(false);
   const progressCardRef = useRef<HTMLDivElement | null>(null);
-  const displayProgress = useAnimatedProgress(progress, busy);
+  const displayProgress = useAnimatedProgress(
+    progress,
+    busy || preparePhase === "running"
+  );
 
   useEffect(() => {
     const loaded = loadSession(sessionId);
@@ -306,6 +429,9 @@ export default function PackWorkshopPage() {
       return;
     }
     setState(loaded);
+    if (loaded.step === 3) {
+      setPreparePhase("running");
+    }
   }, [sessionId, router]);
 
   // Recentre la vue sur la barre de progression à chaque grande étape
@@ -362,6 +488,9 @@ export default function PackWorkshopPage() {
 
   const prepareSelected = useCallback(
     async (current: SessionState) => {
+      cancelledRef.current = false;
+      setPreparePhase("running");
+      setPrepareError(null);
       setBusy(true);
       setProgress(5);
       setProgressMsg("Préparation des épisodes…");
@@ -369,6 +498,17 @@ export default function PackWorkshopPage() {
         current.selectedEpisodeIds.includes(e.id)
       );
       const drafts: Record<string, Draft> = {};
+      const isCancelled = () => cancelledRef.current;
+
+      const fail = (message: string) => {
+        if (cancelledRef.current) return false;
+        setPrepareError(message);
+        setPreparePhase("error");
+        setBusy(false);
+        setProgress(0);
+        setProgressMsg("");
+        return false;
+      };
 
       try {
         // Lancer toutes les préparations en parallèle ; le sémaphore
@@ -380,10 +520,11 @@ export default function PackWorkshopPage() {
           })
         );
 
-        for (const { ep, prep } of started) {
+        if (cancelledRef.current) return false;
+
+        for (const { prep } of started) {
           if (!prep.ok) {
-            toast.error(prep.error);
-            return false;
+            return fail(prep.error);
           }
         }
 
@@ -395,29 +536,37 @@ export default function PackWorkshopPage() {
         const results = await Promise.all(
           started.map(async ({ ep, prep }) => {
             if (!prep.ok) return { ep, waited: null as null };
-            const waited = await waitJob(prep.data.jobId, (p, msg) => {
-              jobProgress.set(ep.id, p);
-              const values = [...jobProgress.values()];
-              const avg =
-                values.reduce((a, b) => a + b, 0) / Math.max(1, values.length);
-              setProgress(Math.round(avg));
-              if (msg) {
-                setProgressMsg(
-                  selected.length > 1
-                    ? `Préparation (${selected.length} épisodes)…`
-                    : msg
-                );
-              }
-            });
+            const waited = await waitJob(
+              prep.data.jobId,
+              (p, msg) => {
+                if (cancelledRef.current) return;
+                jobProgress.set(ep.id, p);
+                const values = [...jobProgress.values()];
+                const avg =
+                  values.reduce((a, b) => a + b, 0) /
+                  Math.max(1, values.length);
+                setProgress(Math.round(avg));
+                if (msg) {
+                  setProgressMsg(
+                    selected.length > 1
+                      ? `Préparation (${selected.length} épisodes)…`
+                      : msg
+                  );
+                }
+              },
+              isCancelled
+            );
             return { ep, waited };
           })
         );
 
+        if (cancelledRef.current) return false;
+
         for (const { ep, waited } of results) {
           if (!waited) continue;
           if (!waited.ok) {
-            toast.error(waited.error);
-            return false;
+            if (waited.cancelled) return false;
+            return fail(waited.error);
           }
 
           const ref = waited.resultRef
@@ -430,10 +579,9 @@ export default function PackWorkshopPage() {
               })
             : null;
           if (!ref?.coverPath) {
-            toast.error(
+            return fail(
               "Vignette manquante pour cet épisode (image source indisponible)."
             );
-            return false;
           }
 
           const duration =
@@ -455,10 +603,20 @@ export default function PackWorkshopPage() {
           };
         }
 
+        if (cancelledRef.current) return false;
+
+        if (Object.keys(drafts).length === 0) {
+          return fail("Aucune histoire n'a pu être préparée.");
+        }
+
         setDraftStories(drafts);
         setOpenStoryId(selected[0]?.id ?? "");
         const latest = loadSession(sessionId) ?? current;
         persist({ ...latest, step: 3 });
+        setBusy(false);
+        setProgress(0);
+        setProgressMsg("");
+        setPreparePhase("idle");
         return true;
       } finally {
         setBusy(false);
@@ -482,6 +640,28 @@ export default function PackWorkshopPage() {
       void prepareSelected(current);
     }
   }, [state?.step, draftStories, prepareSelected]);
+
+  function leavePrepareCorridor(nextStep: 2 | "home") {
+    cancelledRef.current = true;
+    setPreparePhase("idle");
+    setPrepareError(null);
+    setBusy(false);
+    setProgress(0);
+    setProgressMsg("");
+    const current = stateRef.current;
+    if (nextStep === "home" || !current) {
+      router.push("/");
+      return;
+    }
+    persist({ ...current, step: 2 });
+  }
+
+  function retryPrepare() {
+    const current = stateRef.current;
+    if (!current) return;
+    autoPrepared.current = true;
+    void prepareSelected(current);
+  }
 
   function toggleEpisode(id: string) {
     if (!state) return;
@@ -665,6 +845,16 @@ export default function PackWorkshopPage() {
   const introSeconds = clampTitleClipSeconds(
     state.defaultTitleClipSeconds ?? DEFAULT_TITLE_CLIP_SECONDS
   );
+  const hasDrafts = Object.keys(draftStories).length > 0;
+  const showSelection = step === 2 && preparePhase === "idle";
+  const showEdition = step === 3 && hasDrafts && preparePhase === "idle";
+  const showCorridor =
+    preparePhase === "running" ||
+    preparePhase === "error" ||
+    (step === 3 && !hasDrafts && preparePhase === "idle");
+  const onPack = step === 4;
+  const onSelection = showSelection;
+  const onEditionOrCorridor = !onSelection && !onPack;
 
   return (
     <div className="min-h-screen bg-background">
@@ -675,13 +865,13 @@ export default function PackWorkshopPage() {
               Lunii Pack Builder
             </Link>
             <div className="mt-1 flex flex-wrap gap-2">
-              <Badge variant={step === 2 ? "default" : "secondary"}>
+              <Badge variant={onSelection ? "default" : "secondary"}>
                 1. Épisodes
               </Badge>
-              <Badge variant={step === 3 ? "default" : "secondary"}>
+              <Badge variant={onEditionOrCorridor ? "default" : "secondary"}>
                 2. Édition
               </Badge>
-              <Badge variant={step === 4 ? "default" : "secondary"}>
+              <Badge variant={onPack ? "default" : "secondary"}>
                 3. Pack
               </Badge>
             </div>
@@ -691,7 +881,7 @@ export default function PackWorkshopPage() {
       </header>
 
       <main className="mx-auto max-w-4xl space-y-6 px-4 py-6">
-        {busy && (
+        {busy && preparePhase === "idle" && (
           <Card ref={progressCardRef} className="border-primary/40 scroll-mt-20">
             <CardContent className="space-y-2 pt-6">
               <div className="flex items-center justify-between gap-3">
@@ -707,7 +897,26 @@ export default function PackWorkshopPage() {
           </Card>
         )}
 
-        {step === 2 && (
+        {showCorridor && (
+          <PrepareCorridor
+            storyCount={state.selectedEpisodeIds.length}
+            phase={preparePhase === "idle" ? "running" : preparePhase}
+            progress={displayProgress}
+            message={progressMsg}
+            error={prepareError}
+            canChangeSelection={state.source.kind === "show"}
+            onCancel={() =>
+              leavePrepareCorridor(
+                state.source.kind === "show" ? 2 : "home"
+              )
+            }
+            onRetry={retryPrepare}
+            onBackToSelection={() => leavePrepareCorridor(2)}
+            onChangeUrl={() => leavePrepareCorridor("home")}
+          />
+        )}
+
+        {showSelection && (
           <section className="space-y-4">
             <div className="flex items-start gap-4">
               {state.source.showImageUrl ? (
@@ -805,7 +1014,7 @@ export default function PackWorkshopPage() {
           </section>
         )}
 
-        {step === 3 && (
+        {showEdition && (
           <section className="space-y-4">
             <div className="space-y-1">
               <h1 className="text-2xl font-bold">Édition des histoires</h1>

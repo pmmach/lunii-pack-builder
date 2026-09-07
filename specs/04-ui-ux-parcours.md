@@ -62,7 +62,19 @@ Affichée si `SourceResolution.kind === "show"`.
 - Pendant le chargement de la liste : `Skeleton` reproduisant la forme finale des cartes (pas d'écran blanc — recommandation UX "Loading States")
 - Bouton "Continuer avec N histoire(s)" désactivé tant qu'aucune sélection
 
-Si `kind === "episode"` : cette étape est sautée, l'unique épisode passe directement à l'étape 3.
+Au clic sur "Continuer" : **quitter immédiatement la liste** (ne jamais laisser la sélection visible pendant ou après le process — c'est ce qui faisait "retomber" à l'étape 1).
+
+Si `kind === "episode"` : cette étape est sautée ; l'unique épisode entre dans le couloir de préparation puis l'étape 3.
+
+## Couloir de préparation (entre étapes 2 et 3)
+
+**Pas une 4ᵉ étape numérotée**, **pas une Dialog** par-dessus la liste. Carte pleine largeur qui remplace le contenu, badges : 1. Épisodes (faite) / 2. Édition (destination active).
+
+- Titre : "Préparation de N histoire(s)"
+- `Progress` déterminée + message (`aria-live="polite"`), polling `getJobStatusAction` (intervalle 1s). Plusieurs épisodes en **parallèle** (borné par `MAX_CONCURRENT_JOBS`)
+- Bouton "Annuler" : retour volontaire à la sélection (`kind === "show"`) ou à `/` (`kind === "episode"`). Les jobs serveur peuvent finir ; le client ignore le résultat
+- Succès → étape 3, fichiers déjà prêts (pas de skeleton waveform)
+- Échec → **rester dans le couloir** : `Alert` destructive + "Réessayer" + "Modifier la sélection" (émission) ou "Changer d'URL" (épisode unique). Jamais de retour automatique à la liste
 
 ## Étape 3 — Édition par histoire (répétée pour chaque épisode sélectionné)
 
@@ -87,8 +99,7 @@ Pour chaque histoire :
 1. **Titre** : `Input` pré-rempli avec le titre de l'épisode, éditable
 2. **Audio** : lecteur avec waveform (`wavesurfer.js`, région de sélection draggable) affichant les peaks retournés par `generateWaveformPeaks` ; poignées début/fin de l'histoire ; texte d'aide rappelant la durée d'intro du pack (« Intro : N s (réglage commun au pack) »)
 3. **Image** : aperçu carré 320x320 de la vignette (alt descriptif si image présente)
-4. **Progression** pendant les traitements serveur :
-   - **Préparation** (téléchargement + conversion MP3 si besoin + vignette + waveform) : `Progress` shadcn liée au polling de `getJobStatusAction` (intervalle 1s). Plusieurs épisodes sélectionnés sont préparés en **parallèle** (borné par `MAX_CONCURRENT_JOBS` côté serveur)
+4. **Progression** pendant les traitements serveur (découpe et export uniquement — la préparation vit dans le couloir ci-dessus) :
    - **Validation / découpe** : appel synchrone à `trimEpisodeAction` sur `source.mp3` (copie de flux, quasi instantanée) ; plusieurs découpes en parallèle si multi-histoires
    - **Export** : messages "Assemblage…", "Compression…"
    - À chaque grande étape (`busy === true`) : recentrage sur la carte de progression (`scrollIntoView`)
@@ -131,6 +142,7 @@ Points de rupture à tester : 375px (mobile), 768px (tablette), 1024px et 1440px
 - [ ] Les 4 étapes sont navigables entièrement au clavier
 - [ ] Mode sombre fonctionnel via un toggle (icône soleil/lune dans l'en-tête), contrastes vérifiés dans les deux modes
 - [ ] Aucun écran blanc pendant un chargement (skeletons ou barres de progression partout où une action serveur > 300ms est en cours)
-- [ ] Pendant préparation / découpe / export : la page recentre sur la barre de progression, et la barre avance de façon continue (pas de sauts figés longtemps)
+- [ ] Après "Continuer", la liste d'épisodes disparaît ; on n'y revient que via "Annuler" / "Modifier la sélection"
+- [ ] Pendant préparation (couloir) / découpe / export : barre de progression continue (pas de sauts figés longtemps) ; découpe et export recentrent sur la carte (`scrollIntoView`)
 - [ ] Testé visuellement aux 4 largeurs listées ci-dessus
 - [ ] `npm run lint` et `npm run build` toujours au vert après ajout de l'UI
