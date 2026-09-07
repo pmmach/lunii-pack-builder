@@ -22,6 +22,33 @@ export function isDirectoryUrl(rawUrl: string): boolean {
   }
 }
 
+/** Extrait l'ID numérique d'une URL Apple Podcasts (`/id123` ou `?id=123`). */
+export function extractApplePodcastId(rawUrl: string): string | undefined {
+  try {
+    const u = new URL(rawUrl);
+    if (!u.hostname.toLowerCase().includes("podcasts.apple.com")) {
+      return undefined;
+    }
+    const pathMatch = u.pathname.match(/\/id(\d+)/i);
+    if (pathMatch?.[1]) return pathMatch[1];
+    const queryId = u.searchParams.get("id");
+    if (queryId && /^\d+$/.test(queryId)) return queryId;
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Nettoie un titre de page pour une recherche iTunes
+ * (retire suffixes type " - Site", " | Site", " · Site").
+ */
+export function cleanShowTitle(raw: string): string {
+  const t = raw.trim();
+  const cut = t.split(/\s+[-|·•–—]\s+/)[0]?.trim() ?? t;
+  return cut.length > 0 ? cut : t;
+}
+
 function normalizeForCompare(s: string): string {
   return s
     .normalize("NFD")
@@ -102,7 +129,7 @@ async function fetchShowName(rawUrl: string): Promise<Result<string>> {
   if (!title) {
     return err("Impossible d'obtenir le nom de l'émission", "NO_SHOW_NAME");
   }
-  return ok(title);
+  return ok(cleanShowTitle(title));
 }
 
 type ItunesResult = {
@@ -110,29 +137,32 @@ type ItunesResult = {
   feedUrl?: string;
 };
 
-export async function searchItunesFeed(
-  showName: string
+async function parseItunesResults(
+  text: string
+): Promise<Result<ItunesResult[]>> {
+  try {
+    const json = JSON.parse(text) as { results?: ItunesResult[] };
+    return ok(json.results ?? []);
+  } catch {
+    return err("Réponse iTunes invalide", "ITUNES_ERROR");
+  }
+}
+
+/** Lookup direct par ID Apple Podcasts (plus fiable que la recherche textuelle). */
+export async function lookupItunesById(
+  appleId: string
 ): Promise<Result<{ feedUrl: string; collectionName: string }>> {
-  const searchUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(showName)}&entity=podcast&limit=5`;
-  const fetched = await safeFetch(searchUrl);
+  const lookupUrl = `https://itunes.apple.com/lookup?id=${encodeURIComponent(appleId)}&entity=podcast`;
+  const fetched = await safeFetch(lookupUrl);
   if (!fetched.ok) return fetched;
   const text = await readResponseText(fetched.data);
   if (!text.ok) return text;
 
-  let results: ItunesResult[] = [];
-  try {
-    const json = JSON.parse(text.data) as { results?: ItunesResult[] };
-    results = json.results ?? [];
-  } catch {
-    return err("Réponse iTunes invalide", "ITUNES_ERROR");
-  }
+  const parsed = await parseItunesResults(text.data);
+  if (!parsed.ok) return parsed;
 
-  for (const item of results) {
-    if (
-      item.feedUrl &&
-      item.collectionName &&
-      namesMatch(showName, item.collectionName)
-    ) {
+  for (const item of parsed.data) {
+    if (item.feedUrl && item.collectionName) {
       return ok({
         feedUrl: item.feedUrl,
         collectionName: item.collectionName,
@@ -146,6 +176,38 @@ export async function searchItunesFeed(
   );
 }
 
+export async function searchItunesFeed(
+  showName: string
+): Promise<Result<{ feedUrl: string; collectionName: string }>> {
+  const cleaned = cleanShowTitle(showName);
+  const searchUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(cleaned)}&entity=podcast&limit=5`;
+  const fetched = await safeFetch(searchUrl);
+  if (!fetched.ok) return fetched;
+  const text = await readResponseText(fetched.data);
+  if (!text.ok) return text;
+
+  const parsed = await parseItunesResults(text.data);
+  if (!parsed.ok) return parsed;
+
+  const match = pickItunesMatch(cleaned, parsed.data);
+  if (match) return ok(match);
+
+  return err(
+    "Impossible de trouver un flux RSS public pour cette émission. Les plateformes comme Spotify ne permettent pas le téléchargement direct de l'audio.",
+    "NO_PUBLIC_FEED"
+  );
+}
+
+async function fetchAndParseFeed(
+  feedUrl: string
+): Promise<Result<SourceResolution>> {
+  const feedFetched = await safeFetch(feedUrl);
+  if (!feedFetched.ok) return feedFetched;
+  const xml = await readResponseText(feedFetched.data);
+  if (!xml.ok) return xml;
+  return parseRssFromXml(xml.data, feedUrl, "directory-search");
+}
+
 export async function resolveFromDirectory(
   rawUrl: string
 ): Promise<Result<SourceResolution>> {
@@ -156,18 +218,20 @@ export async function resolveFromDirectory(
     );
   }
 
+  const appleId = extractApplePodcastId(rawUrl);
+  if (appleId) {
+    const byId = await lookupItunesById(appleId);
+    if (byId.ok) return fetchAndParseFeed(byId.data.feedUrl);
+    // Si le lookup échoue (réseau / pas de feed), tenter la recherche textuelle
+  }
+
   const nameResult = await fetchShowName(rawUrl);
   if (!nameResult.ok) return nameResult;
 
   const feedResult = await searchItunesFeed(nameResult.data);
   if (!feedResult.ok) return feedResult;
 
-  const feedFetched = await safeFetch(feedResult.data.feedUrl);
-  if (!feedFetched.ok) return feedFetched;
-  const xml = await readResponseText(feedFetched.data);
-  if (!xml.ok) return xml;
-
-  return parseRssFromXml(xml.data, feedResult.data.feedUrl, "directory-search");
+  return fetchAndParseFeed(feedResult.data.feedUrl);
 }
 
 /** Helpers testables sans réseau. */

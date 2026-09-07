@@ -3,6 +3,8 @@ import {
   namesMatch,
   pickItunesMatch,
   isDirectoryUrl,
+  extractApplePodcastId,
+  cleanShowTitle,
 } from "./directory-resolver";
 
 describe("isDirectoryUrl", () => {
@@ -17,6 +19,31 @@ describe("isDirectoryUrl", () => {
     expect(isDirectoryUrl("https://www.radiofrance.fr/podcasts/x")).toBe(
       false
     );
+  });
+});
+
+describe("extractApplePodcastId", () => {
+  it("extrait l'id depuis le path", () => {
+    expect(
+      extractApplePodcastId(
+        "https://podcasts.apple.com/fr/podcast/la-grande-histoire-de-pomme-dapi/id1457819198?mt=2"
+      )
+    ).toBe("1457819198");
+  });
+
+  it("retourne undefined hors Apple", () => {
+    expect(
+      extractApplePodcastId("https://open.spotify.com/show/abc")
+    ).toBeUndefined();
+  });
+});
+
+describe("cleanShowTitle", () => {
+  it("retire le suffixe de site", () => {
+    expect(
+      cleanShowTitle("La grande histoire de Pomme d'Api - Tout Bayard Jeunesse")
+    ).toBe("La grande histoire de Pomme d'Api");
+    expect(cleanShowTitle("Mon podcast | Site")).toBe("Mon podcast");
   });
 });
 

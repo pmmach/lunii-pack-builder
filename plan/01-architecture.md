@@ -40,8 +40,8 @@ Utilisateur importe le .zip dans Lunii Admin Builder / Web → installe sur l'ap
   }
   ```
   - `rss.ts` : lecture directe d'un flux RSS
-  - `generic-page.ts` : découverte du flux RSS depuis une page HTML (link tag / JSON-LD), utilisé pour radiofrance.fr et autres pages de podcast génériques
-  - `spotify-resolver.ts` (et équivalents Apple/Deezer) : n'extrait **aucun audio** — résout uniquement le nom de l'émission vers son flux RSS public via l'API iTunes Search / PodcastIndex
+  - `generic-page.ts` : découverte du flux RSS depuis une page HTML (`<link rel="alternate">`, URL de flux hébergeur embarquée, JSON-LD/OG, liens Apple/Spotify/Deezer sur la page, recherche iTunes par titre) — couvre radiofrance.fr, pages éditeur type Bayard/Ausha, etc.
+  - `directory-resolver.ts` (Spotify / Apple / Deezer) : n'extrait **aucun audio** — résout uniquement vers le flux RSS public via iTunes Lookup (ID Apple) / Search / oEmbed Spotify
 
 - **`lib/media/`**
   - `download.ts` : téléchargement de l'audio source vers le workspace de session
