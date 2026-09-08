@@ -7,6 +7,8 @@ export interface StoryDraft {
   coverImagePath: string;
 }
 
+export type IntroMode = "clip" | "tts";
+
 export interface PackDraft {
   sessionId: string;
   uuid: string;
@@ -15,7 +17,9 @@ export interface PackDraft {
   description?: string;
   coverImagePath: string;
   titleAudioPath?: string;
-  /** Durée (s) de l'intro par défaut pour toutes les histoires sans titleAudioPath. 0 = pas d'intro. Défaut : 8. */
+  /** Durée (s) de l'intro par défaut pour toutes les histoires sans titleAudioPath. 0 = pas d'intro. Défaut : 8. Ignoré si introMode === "tts". */
   defaultTitleClipSeconds?: number;
+  /** Mode d'intro pack-wide. Défaut "clip". */
+  introMode?: IntroMode;
   stories: StoryDraft[];
 }

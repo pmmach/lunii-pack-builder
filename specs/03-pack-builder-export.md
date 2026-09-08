@@ -8,12 +8,23 @@ Construire, à partir d'une ou plusieurs histoires préparées, le graphe STUdio
 
 ## Règle par défaut pour l'intro (`titleAudioPath`)
 
-Le besoin initial distingue une "intro" (jouée en sélectionnant l'histoire) du contenu de l'histoire (`storyAudioPath`). Par défaut, en l'absence de sélection explicite d'un extrait dédié par l'utilisateur dans l'éditeur (spec 04) :
+Le besoin initial distingue une "intro" (jouée en sélectionnant l'histoire) du contenu de l'histoire (`storyAudioPath`). Deux modes pack-wide (`PackDraft.introMode`, défaut `"clip"`) — détail TTS dans `specs/07-intro-tts.md` :
+
+### Mode `clip` (défaut, comportement historique)
+
+En l'absence de sélection explicite d'un extrait dédié par l'utilisateur dans l'éditeur (spec 04) :
 
 > intro = les **N premières secondes** de `storyAudioPath`, où N = `pack.defaultTitleClipSeconds` (défaut `DEFAULT_TITLE_CLIP_SECONDS = 8`, plage 0–`MAX_TITLE_CLIP_SECONDS` = 30, dans `src/lib/pack/constants.ts`), produites avec la même fonction `trimAudio` que la spec 02 (copie de flux si la source est déjà MP3).
 
 - Si N = 0 : **pas d'intro** (`titleAudioPath` reste absent → `audio: null` sur le nœud `cover`/`menu`).
 - Si l'utilisateur a explicitement fourni un `titleAudioPath` distinct (généré par l'éditeur de la spec 04 via un second appel à `trimAudio`), celui-ci est utilisé tel quel (le réglage N ne s'applique pas).
+
+### Mode `tts`
+
+> intro = synthèse vocale cloud du **titre** de l'histoire (et du titre du pack si multi-histoires), écrite en MP3 dans `workspace/<sessionId>/tts/`.
+
+- Pas de fallback silencieux vers le mode clip : en cas d'échec TTS, `writePackToDisk` échoue avec un message clair.
+- `defaultTitleClipSeconds` est ignoré en mode `tts`.
 
 ## Types (`src/lib/pack/types.ts`)
 
@@ -35,7 +46,9 @@ export interface PackDraft {
   description?: string;
   coverImagePath: string;       // vignette du pack (par défaut : cover de la 1ère histoire) ; utilisée seulement si >1 histoire (cf. studio-format.ts)
   titleAudioPath?: string;       // intro du pack (optionnel) ; utilisée seulement si >1 histoire
-  defaultTitleClipSeconds?: number; // durée (s) de l'intro par défaut pour toutes les histoires sans titleAudioPath ; 0 = pas d'intro ; défaut 8 ; borné à [0, 30]
+  defaultTitleClipSeconds?: number; // durée (s) de l'intro par défaut pour toutes les histoires sans titleAudioPath ; 0 = pas d'intro ; défaut 8 ; borné à [0, 30] ; ignoré si introMode === "tts"
+  /** Mode d'intro pack-wide. Défaut "clip". Voir specs/07-intro-tts.md. */
+  introMode?: "clip" | "tts";
   stories: StoryDraft[];
 }
 ```
@@ -87,7 +100,10 @@ export async function writePackToDisk(pack: PackDraft, destDir: string): Promise
 
 1. Appeler `validatePackDraft`, retourner l'erreur telle quelle si invalide
 2. Calculer `packSlug = slugify(pack.title)` ; si un dossier `destDir/<packSlug>` existe déjà, suffixer `-2`, `-3`, etc. jusqu'à obtenir un nom libre ; créer `destDir/<packSlug>/assets/`
-3. Pour chaque histoire sans `titleAudioPath`, générer l'extrait par défaut (N premières secondes selon `pack.defaultTitleClipSeconds`, cf. règle ci-dessus ; si N = 0, ne pas générer d'intro) dans un dossier temporaire `destDir/.tmp-<packSlug>/`, puis résoudre un `PackDraft` où chaque histoire a un `titleAudioPath` défini **ou** volontairement absent
+3. Résoudre les intros selon `pack.introMode` (défaut `"clip"`) :
+   - **`clip`** : pour chaque histoire sans `titleAudioPath`, générer l'extrait par défaut (N premières secondes selon `pack.defaultTitleClipSeconds`, cf. règle ci-dessus ; si N = 0, ne pas générer d'intro) dans un dossier temporaire `destDir/.tmp-<packSlug>/`
+   - **`tts`** : pour chaque histoire, synthétiser le titre via `lib/tts` dans `workspace/<sessionId>/tts/` (cache hash) ; si `stories.length > 1`, synthétiser aussi `pack.titleAudioPath` à partir de `pack.title`
+   Puis résoudre un `PackDraft` où chaque histoire a un `titleAudioPath` défini **ou** volontairement absent (mode clip N=0)
 4. Appeler `buildStudioPack` sur ce pack résolu
 5. Copier chaque asset planifié (`asset.sourcePath` → `destDir/<packSlug>/assets/<asset.assetFileName>`)
 6. Écrire `destDir/<packSlug>/story.json` = `JSON.stringify(studioPack)` (minifié, comme le format observé)

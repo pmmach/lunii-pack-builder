@@ -66,23 +66,31 @@ workspace
 | `MAX_CONCURRENT_JOBS` | `2` | Traitements ffmpeg/téléchargement simultanés max |
 | `DOWNLOAD_TIMEOUT_MS` | `300000` | Timeout d'inactivité d'un téléchargement audio (ms) ; relancé à chaque chunk reçu |
 | `WORKSPACE_TTL_MINUTES` | `30` | Délai avant purge d'une session terminée |
-| `RATE_LIMIT_PER_MINUTE` | `10` | Requêtes max par IP/minute sur les actions lourdes (résolution, export) |
+| `RATE_LIMIT_PER_MINUTE` | `10` | Requêtes max par IP/minute sur les actions lourdes (résolution, export, aperçu TTS) |
 | `PODCASTINDEX_API_KEY` / `_SECRET` | (vide) | Optionnel, fallback si l'iTunes Search API ne suffit pas (spec 01) |
+| `TTS_PROVIDER` | `edge` | Provider TTS : `edge` (sans clé) \| `azure` \| `google` (spec 07) |
+| `TTS_LANGUAGE` | `fr-FR` | Locale TTS (v1 : français) |
+| `TTS_VOICE` | `fr-FR-EloiseNeural` | Voix provider (enfant FR) |
+| `TTS_TIMEOUT_MS` | `8000` | Timeout d'un appel TTS (ms) |
+| `TTS_MAX_CONCURRENT` | `1` | Synthèses TTS simultanées max |
+| `TTS_MAX_CHARS` | `200` | Longueur max du texte synthétisé |
+| `AZURE_SPEECH_KEY` / `AZURE_SPEECH_REGION` | (vide) | Requis si `TTS_PROVIDER=azure` |
+| `GOOGLE_TTS_API_KEY` | (vide) | Requis si `TTS_PROVIDER=google` |
 
-Toutes ont des valeurs par défaut sûres dans `src/lib/shared/env.ts` (spec 00) — aucune n'est strictement obligatoire au démarrage.
+Toutes ont des valeurs par défaut sûres dans `src/lib/shared/env.ts` (spec 00) — aucune n'est strictement obligatoire au démarrage. Avec le défaut `edge`, le mode intro « Synthétique » est disponible sans configuration. Azure/Google sans clés : option désactivée dans l'UI (spec 07).
 
 ## Garde-fous anti-abus (obligatoires pour un déploiement public sans authentification)
 
 ### Limitation de débit par IP (`src/lib/shared/rate-limit.ts`)
 
 ```typescript
-export function checkRateLimit(ip: string, bucket: "resolve" | "export"): Result<true>;
+export function checkRateLimit(ip: string, bucket: "resolve" | "export" | "tts"): Result<true>;
 ```
 
 - Implémentation en mémoire (token bucket ou fenêtre glissante simple, `Map<string, { count: number; resetAt: number }>`), clé = `ip + bucket`
 - Limite : `env.RATE_LIMIT_PER_MINUTE` requêtes par minute et par IP, par bucket
 - Dépassement → `err("Trop de requêtes, réessaie dans une minute.", "RATE_LIMITED")`
-- Appelé en première ligne des Server Actions `resolveSourceAction` et `exportPackAction` (specs 01 et 03) — récupérer l'IP via l'en-tête `x-forwarded-for` (Coolify/Traefik le fournit) avec fallback sur l'IP de connexion directe en dev local
+- Appelé en première ligne des Server Actions `resolveSourceAction`, `exportPackAction` (specs 01 et 03) et `synthesizeTitleAction` (spec 07) — récupérer l'IP via l'en-tête `x-forwarded-for` (Coolify/Traefik le fournit) avec fallback sur l'IP de connexion directe en dev local
 - **Ne pas** présenter ceci comme une authentification : c'est un garde-fou technique, pas un contrôle d'accès (cf. `requirements/01-exigences-fonctionnelles.md`)
 
 ### Purge automatique de l'espace de travail (`src/lib/jobs/cleanup.ts`)

@@ -49,10 +49,16 @@ Utilisateur importe le .zip dans Lunii Admin Builder / Web → installe sur l'ap
   - `image.ts` : recadrage/redimensionnement sharp vers 320x320 JPEG
   - `waveform.ts` : génération des données de waveform pour l'éditeur visuel côté client
 
+- **`lib/tts/`** — synthèse vocale pour les intros (optionnel, cloud) :
+  - `sanitize.ts` / `cache.ts` : nettoyage du titre + cache disque par hash
+  - `providers/edge.ts` / `azure.ts` / `google.ts` : adapters → MP3 (défaut : Edge, sans clé)
+  - `index.ts` : factory selon `TTS_PROVIDER` ; utilisé par `write-to-disk` (export) et l'action d'aperçu
+  - Détail : `specs/07-intro-tts.md`
+
 - **`lib/pack/`**
-  - `types.ts` / `model.ts` : `PackDraft`, `StoryDraft` (titre, auteur, uuid, chemins des assets)
+  - `types.ts` / `model.ts` : `PackDraft`, `StoryDraft` (titre, auteur, uuid, chemins des assets, `introMode`)
   - `studio-format.ts` : construction du graphe STUdio (`story.json`) + plan de copie des assets ; fin de lecture = retour menu (`okTransition` = `homeTransition`)
-  - `write-to-disk.ts` : écrit `assets/` + `story.json`, génère l'intro 8s par défaut si besoin
+  - `write-to-disk.ts` : écrit `assets/` + `story.json`, génère l'intro (clip N s **ou** TTS du titre selon `introMode`)
   - `zip.ts` : compresse le contenu à la **racine** du `.zip` via `archiver` (pas de dossier packSlug wrapper)
 
 - **`lib/jobs/`**

@@ -53,3 +53,10 @@ Depuis le cadrage, chaque phase ci-dessous est détaillée en spec d'implémenta
 - ~~Génération directe du pack STUdio final~~ — fait dès la phase 3 (05/09/2026). Correctif fin de lecture `onEnd: "back"` (06/09/2026) pour éviter l'« erreur carte SD » après autoplay. L'étape manuelle restante (import dans Lunii Admin Builder/Web pour écrire sur l'appareil via USB) est incompressible.
 - ~~Normalisation de volume audio automatique~~ — écartée en v1 (podcasts déjà masterisés ; voir `requirements/02-format-pack-lunii.md`)
 - Persistance légère (SQLite) pour retrouver ses packs entre sessions
+
+## Phase 7 — Intro TTS (synthétique)
+
+- Spec : `specs/07-intro-tts.md`
+- Choix UI pack-wide : intro découpée (comportement actuel) vs intro synthétique (TTS du titre, voix enfant FR)
+- Module `lib/tts/` (**Edge TTS** par défaut sans clé ; Azure/Google en alternative), cache disque, génération à l'export + aperçu à la demande
+- Variables d'env documentées dans `specs/05-deploiement-coolify.md` / `.env.example`

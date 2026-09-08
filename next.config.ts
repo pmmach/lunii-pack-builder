@@ -20,6 +20,7 @@ const nextConfig: NextConfig = {
     "@ffmpeg-installer/ffmpeg",
     "@ffprobe-installer/ffprobe",
     "sharp",
+    "edge-tts-universal",
   ],
 };
 

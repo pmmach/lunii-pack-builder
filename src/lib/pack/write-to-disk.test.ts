@@ -1,10 +1,13 @@
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { setTtsProviderForTests } from "@/lib/tts";
 import { addStoryToPack, createPackDraft } from "./builder";
 import type { StudioPack } from "./studio-format";
 import { writePackToDisk } from "./write-to-disk";
+import type { TtsProvider } from "@/lib/tts/types";
+import { ok } from "@/lib/shared/result";
 
 const audio = path.join(
   __dirname,
@@ -24,7 +27,16 @@ const cover = path.join(
 let tmpDir: string;
 
 afterEach(async () => {
+  setTtsProviderForTests(null);
   if (tmpDir) await rm(tmpDir, { recursive: true, force: true });
+  await rm(path.join(process.cwd(), "workspace", "sess-tts"), {
+    recursive: true,
+    force: true,
+  }).catch(() => undefined);
+  await rm(path.join(process.cwd(), "workspace", "sess-multi-tts"), {
+    recursive: true,
+    force: true,
+  }).catch(() => undefined);
 });
 
 describe("writePackToDisk", () => {
@@ -215,5 +227,94 @@ describe("writePackToDisk", () => {
     if (!r1.ok || !r2.ok) return;
     expect(path.basename(r1.data.packDir)).toBe("meme-titre");
     expect(path.basename(r2.data.packDir)).toBe("meme-titre-2");
+  }, 30_000);
+
+  it("génère des intros TTS pour une histoire", async () => {
+    tmpDir = await mkdtemp(path.join(os.tmpdir(), "lunii-pack-"));
+    const fake: TtsProvider = {
+      id: "azure",
+      async synthesize(text, outputPath) {
+        await writeFile(outputPath, Buffer.from(`tts:${text}`));
+        return ok({ filePath: outputPath });
+      },
+    };
+    setTtsProviderForTests(fake);
+
+    let pack = createPackDraft("sess-tts", {
+      title: "Pack TTS",
+      author: "Auteur",
+    });
+    pack = { ...pack, introMode: "tts" };
+    pack = addStoryToPack(pack, {
+      id: "1",
+      title: "Histoire Magique",
+      storyAudioPath: audio,
+      coverImagePath: cover,
+    });
+
+    const result = await writePackToDisk(pack, tmpDir);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const assetFiles = await readdir(path.join(result.data.packDir, "assets"));
+    // cover + intro TTS + story
+    expect(assetFiles).toHaveLength(3);
+
+    const studioPack = JSON.parse(
+      await readFile(path.join(result.data.packDir, "story.json"), "utf-8")
+    ) as StudioPack;
+    const cover_ = studioPack.stageNodes.find((n) => n.type === "cover");
+    expect(cover_?.audio).toBeTruthy();
+  }, 30_000);
+
+  it("génère aussi l'intro pack en multi-histoires TTS", async () => {
+    tmpDir = await mkdtemp(path.join(os.tmpdir(), "lunii-pack-"));
+    const texts: string[] = [];
+    const fake: TtsProvider = {
+      id: "azure",
+      async synthesize(text, outputPath) {
+        texts.push(text);
+        await writeFile(outputPath, Buffer.from(`tts:${text}`));
+        return ok({ filePath: outputPath });
+      },
+    };
+    setTtsProviderForTests(fake);
+
+    let pack = createPackDraft("sess-multi-tts", {
+      title: "Pack Multi",
+      author: "Auteur",
+    });
+    pack = { ...pack, introMode: "tts" };
+    pack = addStoryToPack(pack, {
+      id: "1",
+      title: "Histoire A",
+      storyAudioPath: audio,
+      coverImagePath: cover,
+    });
+    pack = addStoryToPack(pack, {
+      id: "2",
+      title: "Histoire B",
+      storyAudioPath: audio,
+      coverImagePath: cover,
+    });
+
+    const result = await writePackToDisk(pack, tmpDir);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(texts).toContain("Histoire A");
+    expect(texts).toContain("Histoire B");
+    expect(texts).toContain("Pack Multi");
+
+    const studioPack = JSON.parse(
+      await readFile(path.join(result.data.packDir, "story.json"), "utf-8")
+    ) as StudioPack;
+    const cover_ = studioPack.stageNodes.find((n) => n.type === "cover");
+    expect(cover_?.audio).toBeTruthy();
+    const menus = studioPack.stageNodes.filter((n) => n.type === "menu");
+    expect(menus).toHaveLength(2);
+    for (const menu of menus) {
+      expect(menu.audio).toBeTruthy();
+    }
   }, 30_000);
 });

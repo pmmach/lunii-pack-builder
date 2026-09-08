@@ -29,6 +29,10 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ThemeToggle } from "@/components/theme-toggle";
+import {
+  IntroModeCard,
+  PackTitleTtsPreview,
+} from "@/components/intro-mode-card";
 import { WaveformEditor } from "@/components/waveform-editor";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -59,7 +63,6 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import { exportPackAction } from "@/lib/actions/export-pack";
 import {
@@ -67,11 +70,11 @@ import {
   prepareEpisodeAction,
   trimEpisodeAction,
 } from "@/lib/actions/media";
+import { getTtsStatusAction } from "@/lib/actions/tts";
 import { PackCoverEditor } from "@/components/pack-cover-editor";
 import {
   clampTitleClipSeconds,
   DEFAULT_TITLE_CLIP_SECONDS,
-  MAX_TITLE_CLIP_SECONDS,
 } from "@/lib/pack/constants";
 import { resolvePackCoverImagePath } from "@/lib/pack/cover";
 import {
@@ -204,63 +207,6 @@ function PrepareCorridor({
         )}
       </CardContent>
     </Card>
-  );
-}
-
-function readSliderSeconds(next: number | readonly number[]): number {
-  const raw = Array.isArray(next) ? next[0] : next;
-  return clampTitleClipSeconds(
-    typeof raw === "number" ? raw : DEFAULT_TITLE_CLIP_SECONDS
-  );
-}
-
-function IntroDurationSlider({
-  value,
-  disabled,
-  onCommit,
-}: {
-  value: number;
-  disabled?: boolean;
-  onCommit: (seconds: number) => void;
-}) {
-  const [draft, setDraft] = useState(value);
-
-  useEffect(() => {
-    setDraft(value);
-  }, [value]);
-
-  return (
-    <div className="bg-card space-y-3 rounded-xl border p-4">
-      <div className="flex items-baseline justify-between gap-3">
-        <Label htmlFor="intro-duration">Durée de l&apos;intro</Label>
-        <span
-          id="intro-duration-value"
-          className="text-muted-foreground text-sm tabular-nums"
-        >
-          {draft} s
-        </span>
-      </div>
-      <Slider
-        id="intro-duration"
-        min={0}
-        max={MAX_TITLE_CLIP_SECONDS}
-        step={1}
-        disabled={disabled}
-        value={draft}
-        onValueChange={(next) => setDraft(readSliderSeconds(next))}
-        onValueCommitted={(next) => {
-          const seconds = readSliderSeconds(next);
-          setDraft(seconds);
-          if (seconds !== value) onCommit(seconds);
-        }}
-        aria-valuetext={`${draft} secondes`}
-        aria-describedby="intro-duration-help"
-      />
-      <p id="intro-duration-help" className="text-muted-foreground text-xs">
-        Extrait joué à la sélection de chaque histoire, pris au début du
-        contenu découpé. 0 s = pas d&apos;intro.
-      </p>
-    </div>
   );
 }
 
@@ -414,6 +360,7 @@ export default function PackWorkshopPage() {
   const [removeId, setRemoveId] = useState<string | null>(null);
   const [preparePhase, setPreparePhase] = useState<PreparePhase>("idle");
   const [prepareError, setPrepareError] = useState<string | null>(null);
+  const [ttsConfigured, setTtsConfigured] = useState(false);
   const autoPrepared = useRef(false);
   const cancelledRef = useRef(false);
   const progressCardRef = useRef<HTMLDivElement | null>(null);
@@ -433,6 +380,12 @@ export default function PackWorkshopPage() {
       setPreparePhase("running");
     }
   }, [sessionId, router]);
+
+  useEffect(() => {
+    void getTtsStatusAction().then((result) => {
+      if (result.ok) setTtsConfigured(result.data.configured);
+    });
+  }, []);
 
   // Recentre la vue sur la barre de progression à chaque grande étape
   // de traitement (préparation, découpe, export), où que soit défilée la page.
@@ -763,7 +716,10 @@ export default function PackWorkshopPage() {
   async function doExport() {
     if (!state || state.stories.length === 0) return;
     setBusy(true);
-    setProgressMsg("Assemblage du pack…");
+    const introMode = state.introMode === "tts" ? "tts" : "clip";
+    setProgressMsg(
+      introMode === "tts" ? "Voix des titres…" : "Assemblage du pack…"
+    );
     try {
       let pack: PackDraft = createPackDraft(sessionId, {
         title: state.packTitle,
@@ -772,6 +728,7 @@ export default function PackWorkshopPage() {
       });
       pack = {
         ...pack,
+        introMode,
         defaultTitleClipSeconds: clampTitleClipSeconds(
           state.defaultTitleClipSeconds ?? DEFAULT_TITLE_CLIP_SECONDS
         ),
@@ -800,7 +757,11 @@ export default function PackWorkshopPage() {
         return;
       }
 
-      setProgressMsg("Compression…");
+      setProgressMsg(
+        introMode === "tts"
+          ? "Voix des titres et assemblage…"
+          : "Compression…"
+      );
       const result = await exportPackAction(pack);
       if (!result.ok) {
         toast.error(result.error);
@@ -845,6 +806,12 @@ export default function PackWorkshopPage() {
   const introSeconds = clampTitleClipSeconds(
     state.defaultTitleClipSeconds ?? DEFAULT_TITLE_CLIP_SECONDS
   );
+  const introMode = state.introMode === "tts" ? "tts" : "clip";
+  const previewTitle =
+    (openStoryId && draftStories[openStoryId]?.title) ||
+    episodes.find((e) => e.id === openStoryId)?.title ||
+    Object.values(draftStories)[0]?.title ||
+    "";
   const hasDrafts = Object.keys(draftStories).length > 0;
   const showSelection = step === 2 && preparePhase === "idle";
   const showEdition = step === 3 && hasDrafts && preparePhase === "idle";
@@ -1024,10 +991,17 @@ export default function PackWorkshopPage() {
                 ajuster le titre et le découpage audio.
               </p>
             </div>
-            <IntroDurationSlider
-              value={introSeconds}
+            <IntroModeCard
+              introMode={introMode}
+              clipSeconds={introSeconds}
+              ttsConfigured={ttsConfigured}
               disabled={busy}
-              onCommit={(seconds) =>
+              previewTitle={previewTitle}
+              sessionId={sessionId}
+              onIntroModeChange={(mode) =>
+                persist({ ...state, introMode: mode })
+              }
+              onClipSecondsCommit={(seconds) =>
                 persist({ ...state, defaultTitleClipSeconds: seconds })
               }
             />
@@ -1117,11 +1091,13 @@ export default function PackWorkshopPage() {
                                 }
                               />
                               <p className="text-muted-foreground text-xs">
-                                Intro : {introSeconds} s (réglage commun au pack)
-                                {introSeconds === 0
-                                  ? " — aucune intro audio"
-                                  : ""}
-                                .
+                                {introMode === "tts"
+                                  ? "Intro : titre lu (voix enfant)."
+                                  : `Intro : ${introSeconds} s (réglage commun au pack)${
+                                      introSeconds === 0
+                                        ? " — aucune intro audio"
+                                        : ""
+                                    }.`}
                               </p>
                             </div>
                             <div className="space-y-2">
@@ -1182,6 +1158,13 @@ export default function PackWorkshopPage() {
                   persist({ ...state, packTitle: e.target.value })
                 }
               />
+              {introMode === "tts" && state.stories.length >= 2 ? (
+                <PackTitleTtsPreview
+                  sessionId={sessionId}
+                  packTitle={state.packTitle}
+                  disabled={busy}
+                />
+              ) : null}
             </div>
             <div className="space-y-2">
               <Label htmlFor="pack-author">Auteur</Label>

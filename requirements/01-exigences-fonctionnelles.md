@@ -32,6 +32,9 @@ Avant de figer les exigences, quelques points du besoin initial ont été challe
 - **Récupération des métadonnées** par épisode : titre, description, image de couverture, durée, URL audio
 - **Téléchargement de l'audio** depuis l'URL `enclosure` du flux RSS
 - **Édition audio minimale** : lecture avec forme d'onde, sélection d'un point de début et de fin (trim), aperçu avant validation
+- **Intro audio** (réglage commun au pack) : choix entre
+  - **Découpée** (défaut) : les N premières secondes du contenu découpé de chaque histoire (0 = pas d'intro)
+  - **Synthétique** : synthèse vocale (TTS cloud) du **titre** de chaque histoire (et du titre du pack en multi-histoires), voix enfant française configurable via variables d'environnement — voir `specs/07-intro-tts.md`
 - **Gestion de l'image** :
   - image principale du pack : couverture de l'émission (ou de l'épisode unique)
   - image par histoire : vignette spécifique à l'épisode quand disponible (balise `itunes:image` du flux, sinon enrichissement depuis la page HTML d'origine si celle-ci liste les épisodes avec une image propre — ex. pages podcasts Radio France) ; sinon fallback sur l'image de l'émission

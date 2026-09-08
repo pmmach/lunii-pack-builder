@@ -39,4 +39,14 @@ describe("checkRateLimit", () => {
     t += 60_001;
     expect(checkRateLimit("8.8.8.8", "resolve").ok).toBe(true);
   });
+
+  it("isole le bucket tts des autres", () => {
+    const t = 1_000_000;
+    setRateLimitNowForTests(() => t);
+    for (let i = 0; i < 10; i++) {
+      expect(checkRateLimit("7.7.7.7", "tts").ok).toBe(true);
+    }
+    expect(checkRateLimit("7.7.7.7", "tts").ok).toBe(false);
+    expect(checkRateLimit("7.7.7.7", "export").ok).toBe(true);
+  });
 });

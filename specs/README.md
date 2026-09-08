@@ -15,6 +15,7 @@ Pour le contexte produit (besoin, périmètre, contraintes légales) voir `requi
 | 04 | [`04-ui-ux-parcours.md`](./04-ui-ux-parcours.md) | 00–03 (au moins en types/stubs) | Interface du parcours complet |
 | 05 | [`05-deploiement-coolify.md`](./05-deploiement-coolify.md) | 00–04 | Dockerfile, variables d'env, garde-fous anti-abus, runbook Coolify |
 | 06 | [`06-edition-image-pack.md`](./06-edition-image-pack.md) | 02–04 | Édition de l'image du pack à l'étape "Pack" : reprise auto, import, choix parmi les histoires |
+| 07 | [`07-intro-tts.md`](./07-intro-tts.md) | 03–04 | Intro audio découpée vs synthétique (TTS cloud du titre) |
 
 Chaque spec est conçue pour être livrée et validée indépendamment (une session d'implémentation = une spec = idéalement une PR). Ne pas anticiper le contenu d'une spec suivante pendant l'implémentation d'une spec en cours.
 
@@ -47,6 +48,7 @@ export function err(error: string, code?: string): Result<never> {
 - `src/lib/shared/` : `result.ts`, `env.ts` (accès typé/validé aux variables d'environnement via Zod), `slugify.ts`
 - `src/lib/sources/` : résolution de source (spec 01)
 - `src/lib/media/` : traitement audio/image (spec 02)
+- `src/lib/tts/` : synthèse vocale pour les intros (spec 07)
 - `src/lib/pack/` : modèle de pack, assemblage, zip (spec 03)
 - `src/lib/jobs/` : suivi de progression des tâches longues (spec 02)
 - `src/app/` : routes Next.js (pages + route handlers), Server Actions colocalisées ou dans `src/lib/actions/`

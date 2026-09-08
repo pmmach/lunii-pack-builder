@@ -1,7 +1,7 @@
 import { env } from "@/lib/shared/env";
 import { err, ok, type Result } from "@/lib/shared/result";
 
-type Bucket = "resolve" | "export";
+type Bucket = "resolve" | "export" | "tts";
 
 interface WindowState {
   count: number;
