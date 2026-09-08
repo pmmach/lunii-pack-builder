@@ -8,7 +8,7 @@ const envSchema = z.object({
     .positive()
     .default(DEFAULT_MAX_COVER_UPLOAD_MB),
   MAX_EPISODE_DURATION_SECONDS: z.coerce.number().positive().default(3600),
-  MAX_CONCURRENT_JOBS: z.coerce.number().int().positive().default(2),
+  MAX_CONCURRENT_JOBS: z.coerce.number().int().positive().default(3),
   /** Timeout global d'un téléchargement audio (ms). Les images utilisent un plafond plus bas. */
   DOWNLOAD_TIMEOUT_MS: z.coerce.number().int().positive().default(300_000),
   WORKSPACE_TTL_MINUTES: z.coerce.number().positive().default(30),

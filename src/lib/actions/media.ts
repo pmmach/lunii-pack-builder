@@ -78,7 +78,11 @@ export async function prepareEpisodeAction(
 
   const jobId = createJob();
   activeEpisodeJobs.set(dedupeKey, jobId);
-  updateJob(jobId, { status: "running", message: "Préparation…" });
+  updateJob(jobId, {
+    status: "pending",
+    progress: 0,
+    message: "En file d'attente…",
+  });
   debugMedia("prepare:queued", { episode: safeEpisodeId, jobId });
 
   void withConcurrencyLimit(async () => {
@@ -101,13 +105,21 @@ export async function prepareEpisodeAction(
       const audioPath = path.join(sourceDir, `audio${audioExt}`);
 
       updateJob(jobId, {
-        progress: 10,
+        status: "running",
+        progress: 8,
         message: "Téléchargement de l'audio…",
       });
       const audioDl = await downloadToWorkspace(
         episode.audioUrl,
         audioPath,
-        "audio"
+        "audio",
+        (ratio) => {
+          const pct = Math.round(ratio * 100);
+          updateJob(jobId, {
+            progress: 8 + Math.round(ratio * 20),
+            message: `Téléchargement de l'audio… ${pct}%`,
+          });
+        }
       );
       if (!audioDl.ok) {
         updateJob(jobId, {

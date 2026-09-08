@@ -60,7 +60,8 @@ export interface ImageCropOptions {
 export async function downloadToWorkspace(
   url: string,
   destPath: string,
-  kind: "audio" | "image"
+  kind: "audio" | "image",
+  onProgress?: (ratio: number) => void
 ): Promise<Result<DownloadResult>>;
 ```
 
@@ -69,6 +70,7 @@ export async function downloadToWorkspace(
 - Vérifie le `Content-Type` de la réponse : doit commencer par `audio/` (kind `"audio"`) ou `image/` (kind `"image"`) — sinon `err("Le fichier distant n'est pas au format attendu", "INVALID_CONTENT_TYPE")`
 - Applique une limite de taille (`env.MAX_DOWNLOAD_MB`) : si dépassée pendant le stream, annule et supprime le fichier partiel, retourne `err("Fichier trop volumineux", "FILE_TOO_LARGE")`
 - Timeout d'inactivité : `env.DOWNLOAD_TIMEOUT_MS` (défaut 300s) pour l'audio, 60s pour les images ; le timer est **relancé à chaque chunk** reçu (un gros fichier lent mais progressant ne timeout pas) ; si le flux reste silencieux trop longtemps → `err("Délai dépassé lors du téléchargement", "TIMEOUT")`
+- `onProgress?: (ratio: number) => void` optionnel (0..1) si `Content-Length` est connu, émis au plus toutes les 250 ms — sert au suivi de job / UI du couloir de préparation
 
 ### `src/lib/media/trim.ts`
 

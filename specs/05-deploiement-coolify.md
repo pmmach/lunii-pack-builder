@@ -63,7 +63,7 @@ workspace
 |---|---|---|
 | `MAX_DOWNLOAD_MB` | `100` | Taille max d'un fichier audio/image téléchargé |
 | `MAX_EPISODE_DURATION_SECONDS` | `3600` | Durée max d'un épisode traité (anti-abus) |
-| `MAX_CONCURRENT_JOBS` | `2` | Traitements ffmpeg/téléchargement simultanés max |
+| `MAX_CONCURRENT_JOBS` | `3` | Traitements ffmpeg/téléchargement simultanés max |
 | `DOWNLOAD_TIMEOUT_MS` | `300000` | Timeout d'inactivité d'un téléchargement audio (ms) ; relancé à chaque chunk reçu |
 | `WORKSPACE_TTL_MINUTES` | `30` | Délai avant purge d'une session terminée |
 | `RATE_LIMIT_PER_MINUTE` | `10` | Requêtes max par IP/minute sur les actions lourdes (résolution, export, aperçu TTS) |

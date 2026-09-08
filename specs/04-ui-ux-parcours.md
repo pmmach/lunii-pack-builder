@@ -71,10 +71,13 @@ Si `kind === "episode"` : cette étape est sautée ; l'unique épisode entre dan
 **Pas une 4ᵉ étape numérotée**, **pas une Dialog** par-dessus la liste. Carte pleine largeur qui remplace le contenu, badges : 1. Épisodes (faite) / 2. Édition (destination active).
 
 - Titre : "Préparation de N histoire(s)"
-- `Progress` déterminée + message (`aria-live="polite"`), polling `getJobStatusAction` (intervalle 1s). Plusieurs épisodes en **parallèle** (borné par `MAX_CONCURRENT_JOBS`)
+- Synthèse **par histoires**, pas un pourcentage opaque : "K sur N prêtes" + barre déterminée = moyenne des progressions **réelles** de chaque épisode (téléchargement, conversion, terminé). **Pas d'interpolation artificielle** qui inventait des valeurs (7 % → 20 %) sans rapport avec l'étape en cours
+- Liste des épisodes sélectionnés, chacun avec un état lisible autrement que par la couleur : icône + libellé (`En file d'attente` / message serveur `Téléchargement…` / `Conversion audio…` / `Prête` / erreur). Barre miniature et pourcentage **uniquement** sur l'histoire en cours. Au-delà de 4 lignes, liste scrollable (`max-h-72`)
+- Texte d'attente : la conversion peut prendre 2–3 minutes par histoire ; les suivantes démarrent quand une place se libère (sémaphore)
+- `Progress` + `aria-live` sur la synthèse, polling `getJobStatusAction` (intervalle 1s) **jusqu'à `done` / `error` / annulation**, avec un plafond de sécurité de 45 min — pas un timeout court : la conversion m4a→mp3 d'un épisode Radio France dépasse souvent 3 min, et les jobs encore en file d'attente (sémaphore) plus longtemps. Plusieurs épisodes en **parallèle** (borné par `MAX_CONCURRENT_JOBS`)
 - Bouton "Annuler" : retour volontaire à la sélection (`kind === "show"`) ou à `/` (`kind === "episode"`). Les jobs serveur peuvent finir ; le client ignore le résultat
 - Succès → étape 3, fichiers déjà prêts (pas de skeleton waveform)
-- Échec → **rester dans le couloir** : `Alert` destructive + "Réessayer" + "Modifier la sélection" (émission) ou "Changer d'URL" (épisode unique). Jamais de retour automatique à la liste
+- Échec → **rester dans le couloir** : `Alert` destructive + "Réessayer" (libellé "Réessayer N échec(s)" si d'autres histoires sont déjà prêtes) + "Modifier la sélection" (émission) ou "Changer d'URL" (épisode unique). **Ne relancer que les histoires non prêtes** (statuts ≠ `done` / brouillons manquants) — conserver les fichiers et l'état UI des succès. Jamais de retour automatique à la liste
 
 ## Étape 3 — Édition par histoire (répétée pour chaque épisode sélectionné)
 

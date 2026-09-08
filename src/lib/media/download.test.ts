@@ -88,4 +88,33 @@ describe("downloadToWorkspace", () => {
 
     await expect(access(dest)).rejects.toThrow();
   });
+
+  it("rapporte la progression quand Content-Length est connu", async () => {
+    tmpDir = await mkdtemp(path.join(os.tmpdir(), "lunii-dl-"));
+    const dest = path.join(tmpDir, "ok.mp3");
+    const body = Buffer.alloc(32 * 1024, 1);
+    const ratios: number[] = [];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        return new Response(body, {
+          status: 200,
+          headers: {
+            "content-type": "audio/mpeg",
+            "content-length": String(body.length),
+          },
+        });
+      })
+    );
+
+    const result = await downloadToWorkspace(
+      "https://example.com/ok.mp3",
+      dest,
+      "audio",
+      (ratio) => ratios.push(ratio)
+    );
+    expect(result.ok).toBe(true);
+    expect(ratios.at(-1)).toBe(1);
+  });
 });

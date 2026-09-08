@@ -24,7 +24,8 @@ function isAbortError(e: unknown): boolean {
 export async function downloadToWorkspace(
   url: string,
   destPath: string,
-  kind: "audio" | "image"
+  kind: "audio" | "image",
+  onProgress?: (ratio: number) => void
 ): Promise<Result<DownloadResult>> {
   const safe = await assertSafeUrl(url);
   if (!safe.ok) return safe;
@@ -106,11 +107,22 @@ export async function downloadToWorkspace(
     );
 
     let downloaded = 0;
+    const totalBytes =
+      contentLength && Number(contentLength) > 0 ? Number(contentLength) : 0;
+    let lastProgressAt = 0;
+    const emitProgress = (force = false) => {
+      if (!onProgress || totalBytes <= 0) return;
+      const now = Date.now();
+      if (!force && now - lastProgressAt < 250) return;
+      lastProgressAt = now;
+      onProgress(Math.min(1, downloaded / totalBytes));
+    };
     const counter = new Transform({
       transform(chunk, _enc, cb) {
         downloaded += (chunk as Buffer).length;
         // Relance le timeout tant que des octets arrivent (stall vs durée totale).
         bumpTimeout();
+        emitProgress();
         if (downloaded > maxBytes) {
           cb(new Error("FILE_TOO_LARGE"));
           return;
@@ -121,6 +133,7 @@ export async function downloadToWorkspace(
 
     try {
       await pipeline(nodeStream, counter, createWriteStream(destPath));
+      emitProgress(true);
     } catch (e) {
       await unlink(destPath).catch(() => undefined);
       if (e instanceof Error && e.message === "FILE_TOO_LARGE") {

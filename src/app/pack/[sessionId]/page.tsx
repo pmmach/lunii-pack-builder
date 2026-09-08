@@ -18,6 +18,8 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
+  CircleAlert,
+  Clock,
   GripVertical,
   Loader2,
   Trash2,
@@ -104,12 +106,61 @@ type Draft = {
 };
 
 type PreparePhase = "idle" | "running" | "error";
+type PrepareItemStatus = "queued" | "running" | "done" | "error";
+type JobPollStatus = "pending" | "running" | "done" | "error";
+
+type PrepareItem = {
+  episodeId: string;
+  title: string;
+  status: PrepareItemStatus;
+  progress: number;
+  message: string;
+};
+
+function jobPollToItemStatus(status: JobPollStatus): PrepareItemStatus {
+  if (status === "pending") return "queued";
+  if (status === "done") return "done";
+  if (status === "error") return "error";
+  return "running";
+}
+
+function prepareOverallProgress(items: PrepareItem[]): number {
+  if (items.length === 0) return 0;
+  return Math.round(
+    items.reduce((sum, item) => sum + item.progress, 0) / items.length
+  );
+}
+
+function prepareItemLabel(item: PrepareItem): string {
+  if (item.status === "done") return "Prête";
+  if (item.status === "queued") return "En file d'attente";
+  if (item.status === "error") return item.message || "Échec";
+  return item.message || "En cours…";
+}
+
+function PrepareItemIcon({ status }: { status: PrepareItemStatus }) {
+  if (status === "done") {
+    return <CheckCircle2 className="text-primary size-4 shrink-0" aria-hidden />;
+  }
+  if (status === "error") {
+    return (
+      <CircleAlert className="text-destructive size-4 shrink-0" aria-hidden />
+    );
+  }
+  if (status === "running") {
+    return (
+      <Loader2
+        className="text-primary size-4 shrink-0 animate-spin motion-reduce:animate-none"
+        aria-hidden
+      />
+    );
+  }
+  return <Clock className="text-muted-foreground size-4 shrink-0" aria-hidden />;
+}
 
 function PrepareCorridor({
-  storyCount,
+  items,
   phase,
-  progress,
-  message,
   error,
   canChangeSelection,
   onCancel,
@@ -117,10 +168,8 @@ function PrepareCorridor({
   onBackToSelection,
   onChangeUrl,
 }: {
-  storyCount: number;
+  items: PrepareItem[];
   phase: PreparePhase;
-  progress: number;
-  message: string;
   error: string | null;
   canChangeSelection: boolean;
   onCancel: () => void;
@@ -128,9 +177,28 @@ function PrepareCorridor({
   onBackToSelection: () => void;
   onChangeUrl: () => void;
 }) {
-  const countLabel =
-    storyCount > 1 ? `${storyCount} histoires` : "1 histoire";
+  const total = items.length;
+  const doneCount = items.filter((item) => item.status === "done").length;
+  const failedCount = items.filter((item) => item.status === "error").length;
+  const runningCount = items.filter((item) => item.status === "running").length;
+  const overall = prepareOverallProgress(items);
   const isError = phase === "error";
+  const countLabel = total > 1 ? `${total} histoires` : "1 histoire";
+  const onlyItem = total === 1 ? items[0] : undefined;
+  const summary =
+    total === 0
+      ? "Préparation…"
+      : onlyItem
+        ? onlyItem.status === "done"
+          ? "Histoire prête"
+          : prepareItemLabel(onlyItem)
+        : doneCount === total
+          ? "Toutes les histoires sont prêtes"
+          : `${doneCount} sur ${total} prêtes`;
+  const retryLabel =
+    doneCount > 0 && failedCount > 0
+      ? `Réessayer ${failedCount} échec${failedCount > 1 ? "s" : ""}`
+      : "Réessayer";
 
   return (
     <Card className="border-primary/40">
@@ -148,13 +216,18 @@ function PrepareCorridor({
         </CardTitle>
         <CardDescription>
           {isError
-            ? "Les fichiers n'ont pas pu être préparés. Tu peux réessayer sans perdre ta sélection."
-            : "Téléchargement et conversion des fichiers. L'édition s'ouvrira ensuite."}
+            ? doneCount > 0
+              ? `${doneCount} histoire${doneCount > 1 ? "s" : ""} déjà prête${doneCount > 1 ? "s" : ""} — tu peux ne relancer que les échecs.`
+              : "Les fichiers n'ont pas pu être préparés. Tu peux réessayer sans perdre ta sélection."
+            : "Téléchargement puis conversion — quelques minutes par histoire, surtout en m4a."}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {isError ? (
           <>
+            {items.length > 0 ? (
+              <PrepareEpisodeList items={items} />
+            ) : null}
             <Alert variant="destructive">
               <AlertTitle>Échec de la préparation</AlertTitle>
               <AlertDescription>
@@ -166,7 +239,7 @@ function PrepareCorridor({
                 className="bg-accent text-accent-foreground hover:bg-accent/90 min-h-11"
                 onClick={onRetry}
               >
-                Réessayer
+                {retryLabel}
               </Button>
               {canChangeSelection ? (
                 <Button
@@ -189,17 +262,29 @@ function PrepareCorridor({
           </>
         ) : (
           <>
-            <div className="space-y-2" aria-busy="true" aria-live="polite">
+            <div className="space-y-2" aria-busy="true">
               <div className="flex items-center justify-between gap-3">
-                <p className="text-muted-foreground text-sm">
-                  {message || "Préparation des fichiers…"}
+                <p className="text-sm font-medium" aria-live="polite">
+                  {summary}
+                  {runningCount > 0 && total > 1
+                    ? ` · ${runningCount} en cours`
+                    : ""}
                 </p>
-                <span className="text-muted-foreground text-sm font-medium tabular-nums">
-                  {progress}%
+                <span className="text-muted-foreground text-sm tabular-nums">
+                  {doneCount}/{total || "—"}
                 </span>
               </div>
-              <Progress value={progress} />
+              <Progress
+                value={overall}
+                className="[&_[data-slot=progress-track]]:h-2"
+                aria-valuetext={summary}
+              />
             </div>
+            <PrepareEpisodeList items={items} />
+            <p className="text-muted-foreground text-sm">
+              La conversion peut prendre 2 à 3 minutes par histoire. Les
+              suivantes commencent dès qu&apos;une place se libère.
+            </p>
             <Button variant="outline" className="min-h-11" onClick={onCancel}>
               Annuler
             </Button>
@@ -207,6 +292,62 @@ function PrepareCorridor({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function PrepareEpisodeList({ items }: { items: PrepareItem[] }) {
+  if (items.length === 0) return null;
+  return (
+    <ol
+      className={
+        items.length > 4
+          ? "max-h-72 space-y-2 overflow-y-auto pr-1"
+          : "space-y-2"
+      }
+      aria-label="Progression par histoire"
+    >
+      {items.map((item, index) => {
+        const label = prepareItemLabel(item);
+        return (
+          <li
+            key={item.episodeId}
+            className="bg-muted/40 flex items-start gap-3 rounded-lg border p-3"
+          >
+            <PrepareItemIcon status={item.status} />
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <div className="flex items-start justify-between gap-3">
+                <p className="truncate text-sm font-medium">
+                  <span className="text-muted-foreground mr-1.5 tabular-nums">
+                    {index + 1}.
+                  </span>
+                  {item.title}
+                </p>
+                {item.status === "running" ? (
+                  <span className="text-muted-foreground shrink-0 text-xs font-medium tabular-nums">
+                    {item.progress}%
+                  </span>
+                ) : null}
+              </div>
+              <p
+                className={
+                  item.status === "error"
+                    ? "text-destructive text-xs"
+                    : "text-muted-foreground text-xs"
+                }
+              >
+                {label}
+              </p>
+              {item.status === "running" ? (
+                <Progress
+                  value={item.progress}
+                  aria-valuetext={`${item.title} : ${label}`}
+                />
+              ) : null}
+            </div>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
@@ -314,15 +455,26 @@ function useAnimatedProgress(rawProgress: number, active: boolean): number {
   return Math.round(display);
 }
 
+/** Intervalle de polling du tracker de job (spec 04). */
+const JOB_POLL_INTERVAL_MS = 1_000;
+/**
+ * Plafond de sécurité du couloir de préparation.
+ * Un ré-encodage m4a→mp3 Radio France dure souvent ~3 min par épisode ;
+ * avec le sémaphore (2 jobs à la fois), une sélection de plusieurs
+ * histoires dépasse largement les 3 min d'attente côté client.
+ */
+const JOB_MAX_WAIT_MS = 45 * 60 * 1000;
+
 async function waitJob(
   jobId: string,
-  onProgress?: (p: number, msg?: string) => void,
+  onProgress?: (p: number, msg?: string, status?: JobPollStatus) => void,
   isCancelled?: () => boolean
 ): Promise<
   | { ok: true; resultRef?: string }
   | { ok: false; error: string; cancelled?: boolean }
 > {
-  for (let i = 0; i < 180; i++) {
+  const deadline = Date.now() + JOB_MAX_WAIT_MS;
+  while (Date.now() < deadline) {
     if (isCancelled?.()) {
       return { ok: false, error: "cancelled", cancelled: true };
     }
@@ -331,7 +483,11 @@ async function waitJob(
       return { ok: false, error: "cancelled", cancelled: true };
     }
     if (!status.ok) return { ok: false, error: status.error };
-    onProgress?.(status.data.progress, status.data.message);
+    onProgress?.(
+      status.data.progress,
+      status.data.message,
+      status.data.status
+    );
     if (status.data.status === "done") {
       return { ok: true, resultRef: status.data.resultRef };
     }
@@ -341,7 +497,7 @@ async function waitJob(
         error: status.data.message ?? "Échec du traitement",
       };
     }
-    await new Promise((r) => setTimeout(r, 1000));
+    await new Promise((r) => setTimeout(r, JOB_POLL_INTERVAL_MS));
   }
   return { ok: false, error: "Délai dépassé" };
 }
@@ -360,10 +516,15 @@ export default function PackWorkshopPage() {
   const [removeId, setRemoveId] = useState<string | null>(null);
   const [preparePhase, setPreparePhase] = useState<PreparePhase>("idle");
   const [prepareError, setPrepareError] = useState<string | null>(null);
+  const [prepareItems, setPrepareItems] = useState<PrepareItem[]>([]);
   const [ttsConfigured, setTtsConfigured] = useState(false);
   const autoPrepared = useRef(false);
   const cancelledRef = useRef(false);
   const progressCardRef = useRef<HTMLDivElement | null>(null);
+  const draftStoriesRef = useRef(draftStories);
+  draftStoriesRef.current = draftStories;
+  const prepareItemsRef = useRef(prepareItems);
+  prepareItemsRef.current = prepareItems;
   const displayProgress = useAnimatedProgress(
     progress,
     busy || preparePhase === "running"
@@ -440,21 +601,85 @@ export default function PackWorkshopPage() {
   );
 
   const prepareSelected = useCallback(
-    async (current: SessionState) => {
+    async (
+      current: SessionState,
+      episodeIdsToPrepare?: string[]
+    ) => {
       cancelledRef.current = false;
       setPreparePhase("running");
       setPrepareError(null);
       setBusy(true);
-      setProgress(5);
+      setProgress(0);
       setProgressMsg("Préparation des épisodes…");
+
       const selected = current.source.episodes.filter((e) =>
         current.selectedEpisodeIds.includes(e.id)
       );
-      const drafts: Record<string, Draft> = {};
+      const retryIds =
+        episodeIdsToPrepare && episodeIdsToPrepare.length > 0
+          ? new Set(episodeIdsToPrepare)
+          : null;
+      const toPrepare = retryIds
+        ? selected.filter((ep) => retryIds.has(ep.id))
+        : selected;
+
+      const drafts: Record<string, Draft> = { ...draftStoriesRef.current };
+      if (!retryIds) {
+        for (const key of Object.keys(drafts)) {
+          if (!selected.some((ep) => ep.id === key)) {
+            delete drafts[key];
+          }
+        }
+      }
+
       const isCancelled = () => cancelledRef.current;
+      const patchItem = (episodeId: string, patch: Partial<PrepareItem>) => {
+        setPrepareItems((prev) =>
+          prev.map((item) =>
+            item.episodeId === episodeId ? { ...item, ...patch } : item
+          )
+        );
+      };
+
+      const previousItems = new Map(
+        prepareItemsRef.current.map((item) => [item.episodeId, item])
+      );
+      setPrepareItems(
+        selected.map((ep) => {
+          const kept = previousItems.get(ep.id);
+          if (
+            retryIds &&
+            !retryIds.has(ep.id) &&
+            (kept?.status === "done" || drafts[ep.id])
+          ) {
+            return (
+              kept ?? {
+                episodeId: ep.id,
+                title: ep.title,
+                status: "done" as const,
+                progress: 100,
+                message: "Prête",
+              }
+            );
+          }
+          return {
+            episodeId: ep.id,
+            title: ep.title,
+            status: "queued" as const,
+            progress: 0,
+            message: "En file d'attente",
+          };
+        })
+      );
+
+      const persistPartialDrafts = () => {
+        draftStoriesRef.current = drafts;
+        setDraftStories({ ...drafts });
+      };
 
       const fail = (message: string) => {
         if (cancelledRef.current) return false;
+        persistPartialDrafts();
         setPrepareError(message);
         setPreparePhase("error");
         setBusy(false);
@@ -464,10 +689,22 @@ export default function PackWorkshopPage() {
       };
 
       try {
-        // Lancer toutes les préparations en parallèle ; le sémaphore
+        if (toPrepare.length === 0) {
+          if (selected.every((ep) => drafts[ep.id])) {
+            setDraftStories(drafts);
+            setOpenStoryId(selected[0]?.id ?? "");
+            const latest = loadSession(sessionId) ?? current;
+            persist({ ...latest, step: 3 });
+            setPreparePhase("idle");
+            return true;
+          }
+          return fail("Aucune histoire à préparer.");
+        }
+
+        // Lancer les préparations ciblées en parallèle ; le sémaphore
         // serveur (MAX_CONCURRENT_JOBS) borne la charge réelle.
         const started = await Promise.all(
-          selected.map(async (ep) => {
+          toPrepare.map(async (ep) => {
             const prep = await prepareEpisodeAction(sessionId, ep);
             return { ep, prep };
           })
@@ -475,15 +712,18 @@ export default function PackWorkshopPage() {
 
         if (cancelledRef.current) return false;
 
-        for (const { prep } of started) {
+        let startError: string | null = null;
+        for (const { ep, prep } of started) {
           if (!prep.ok) {
-            return fail(prep.error);
+            patchItem(ep.id, {
+              status: "error",
+              message: prep.error,
+            });
+            startError ??= prep.error;
           }
         }
-
-        const jobProgress = new Map<string, number>();
-        for (const { ep, prep } of started) {
-          if (prep.ok) jobProgress.set(ep.id, 0);
+        if (startError) {
+          return fail(startError);
         }
 
         const results = await Promise.all(
@@ -491,21 +731,15 @@ export default function PackWorkshopPage() {
             if (!prep.ok) return { ep, waited: null as null };
             const waited = await waitJob(
               prep.data.jobId,
-              (p, msg) => {
+              (p, msg, jobStatus) => {
                 if (cancelledRef.current) return;
-                jobProgress.set(ep.id, p);
-                const values = [...jobProgress.values()];
-                const avg =
-                  values.reduce((a, b) => a + b, 0) /
-                  Math.max(1, values.length);
-                setProgress(Math.round(avg));
-                if (msg) {
-                  setProgressMsg(
-                    selected.length > 1
-                      ? `Préparation (${selected.length} épisodes)…`
-                      : msg
-                  );
-                }
+                patchItem(ep.id, {
+                  progress: p,
+                  message: msg ?? "En cours…",
+                  status: jobStatus
+                    ? jobPollToItemStatus(jobStatus)
+                    : "running",
+                });
               },
               isCancelled
             );
@@ -515,11 +749,17 @@ export default function PackWorkshopPage() {
 
         if (cancelledRef.current) return false;
 
+        let waitError: string | null = null;
         for (const { ep, waited } of results) {
           if (!waited) continue;
           if (!waited.ok) {
             if (waited.cancelled) return false;
-            return fail(waited.error);
+            patchItem(ep.id, {
+              status: "error",
+              message: waited.error,
+            });
+            waitError ??= waited.error;
+            continue;
           }
 
           const ref = waited.resultRef
@@ -532,9 +772,11 @@ export default function PackWorkshopPage() {
               })
             : null;
           if (!ref?.coverPath) {
-            return fail(
-              "Vignette manquante pour cet épisode (image source indisponible)."
-            );
+            const message =
+              "Vignette manquante pour cet épisode (image source indisponible).";
+            patchItem(ep.id, { status: "error", message });
+            waitError ??= message;
+            continue;
           }
 
           const duration =
@@ -554,15 +796,30 @@ export default function PackWorkshopPage() {
             coverPath: ref.coverPath,
             duration,
           };
+          patchItem(ep.id, {
+            status: "done",
+            progress: 100,
+            message: "Prête",
+          });
+        }
+
+        if (waitError) {
+          return fail(waitError);
         }
 
         if (cancelledRef.current) return false;
 
-        if (Object.keys(drafts).length === 0) {
-          return fail("Aucune histoire n'a pu être préparée.");
+        const missing = selected.filter((ep) => !drafts[ep.id]);
+        if (missing.length > 0) {
+          return fail(
+            missing.length === 1
+              ? "Une histoire n'a pas pu être préparée."
+              : `${missing.length} histoires n'ont pas pu être préparées.`
+          );
         }
 
         setDraftStories(drafts);
+        draftStoriesRef.current = drafts;
         setOpenStoryId(selected[0]?.id ?? "");
         const latest = loadSession(sessionId) ?? current;
         persist({ ...latest, step: 3 });
@@ -598,6 +855,9 @@ export default function PackWorkshopPage() {
     cancelledRef.current = true;
     setPreparePhase("idle");
     setPrepareError(null);
+    setPrepareItems([]);
+    setDraftStories({});
+    draftStoriesRef.current = {};
     setBusy(false);
     setProgress(0);
     setProgressMsg("");
@@ -613,7 +873,14 @@ export default function PackWorkshopPage() {
     const current = stateRef.current;
     if (!current) return;
     autoPrepared.current = true;
-    void prepareSelected(current);
+    const failedIds = prepareItemsRef.current
+      .filter((item) => item.status !== "done")
+      .map((item) => item.episodeId);
+    const missingIds = current.selectedEpisodeIds.filter(
+      (id) => !draftStoriesRef.current[id]
+    );
+    const toRetry = [...new Set([...failedIds, ...missingIds])];
+    void prepareSelected(current, toRetry.length > 0 ? toRetry : undefined);
   }
 
   function toggleEpisode(id: string) {
@@ -819,6 +1086,18 @@ export default function PackWorkshopPage() {
     preparePhase === "running" ||
     preparePhase === "error" ||
     (step === 3 && !hasDrafts && preparePhase === "idle");
+  const corridorItems =
+    prepareItems.length > 0
+      ? prepareItems
+      : (state?.source.episodes ?? [])
+          .filter((e) => state?.selectedEpisodeIds.includes(e.id))
+          .map((ep) => ({
+            episodeId: ep.id,
+            title: ep.title,
+            status: "queued" as const,
+            progress: 0,
+            message: "En file d'attente",
+          }));
   const onPack = step === 4;
   const onSelection = showSelection;
   const onEditionOrCorridor = !onSelection && !onPack;
@@ -866,10 +1145,8 @@ export default function PackWorkshopPage() {
 
         {showCorridor && (
           <PrepareCorridor
-            storyCount={state.selectedEpisodeIds.length}
+            items={corridorItems}
             phase={preparePhase === "idle" ? "running" : preparePhase}
-            progress={displayProgress}
-            message={progressMsg}
             error={prepareError}
             canChangeSelection={state.source.kind === "show"}
             onCancel={() =>
