@@ -19,7 +19,7 @@ export interface PackDraft {
   titleAudioPath?: string;
   /** Durée (s) de l'intro par défaut pour toutes les histoires sans titleAudioPath. 0 = pas d'intro. Défaut : 8. Ignoré si introMode === "tts". */
   defaultTitleClipSeconds?: number;
-  /** Mode d'intro pack-wide. Défaut "clip". */
+  /** Mode d'intro pack-wide. Défaut "tts". */
   introMode?: IntroMode;
   stories: StoryDraft[];
 }

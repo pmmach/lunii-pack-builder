@@ -81,7 +81,7 @@ export async function writePackToDisk(
   const packSlug = await uniqueDirName(destDir, slugify(pack.title));
   const packDir = path.join(destDir, packSlug);
   const tempDir = path.join(destDir, `.tmp-${packSlug}`);
-  const introMode: IntroMode = pack.introMode ?? "clip";
+  const introMode: IntroMode = pack.introMode ?? "tts";
   const clipSeconds = clampTitleClipSeconds(
     pack.defaultTitleClipSeconds ?? DEFAULT_TITLE_CLIP_SECONDS
   );

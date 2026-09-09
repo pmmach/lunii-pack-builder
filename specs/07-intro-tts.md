@@ -16,7 +16,7 @@ Génération à l'**export** + aperçu à la demande. Pas de TTS pendant la pré
 | Point | Décision |
 |---|---|
 | Portée | Réglage **pack-wide** (`SessionState.introMode` / `PackDraft.introMode`), pas par histoire |
-| Défaut | `"clip"` — aucun changement pour les sessions existantes |
+| Défaut | `"tts"` — les sessions déjà enregistrées en `"clip"` restent en clip |
 | Texte lu | Titre affiché de l'histoire ; multi → aussi titre du pack. Pas de champ texte séparé |
 | Langue v1 | Français figé côté UI ; `TTS_LANGUAGE` / `TTS_VOICE` en env pour plus tard |
 | Provider défaut | **Edge TTS** (sans clé, voix `fr-FR-EloiseNeural`) via `edge-tts-universal` |
@@ -53,18 +53,18 @@ export type IntroMode = "clip" | "tts";
 
 export interface PackDraft {
   // ...champs existants...
-  introMode?: IntroMode; // défaut "clip"
+  introMode?: IntroMode; // défaut "tts"
 }
 ```
 
 ### `src/lib/session/client-store.ts`
 
 ```typescript
-introMode: IntroMode; // défaut "clip"
+introMode: IntroMode; // défaut "tts"
 ```
 
-- `loadSession` : `introMode: parsed.introMode ?? "clip"`
-- `src/app/page.tsx` : initialiser `introMode: "clip"` à la création de session
+- `loadSession` : `introMode: parsed.introMode === "clip" ? "clip" : "tts"`
+- `src/app/page.tsx` : initialiser `introMode: "tts"` à la création de session
 
 ## Module `src/lib/tts/`
 
@@ -236,7 +236,7 @@ Nettoyé avec le reste de la session (TTL / purge existante).
 - `sanitize.test.ts` : HTML, espaces, troncature
 - `cache.test.ts` : même texte → même hash ; voix différente → hash différent
 - `azure.test.ts` / `google.test.ts` : fetch mocké, body/headers, 429 → message FR, timeout
-- `write-to-disk.test.ts` : `introMode: "tts"` avec provider injecté/mock → intro présente ; multi → pack.titleAudioPath ; clip 0 inchangé
+- `write-to-disk.test.ts` : défaut (sans `introMode`) → intro TTS ; `introMode: "tts"` multi → pack.titleAudioPath ; clip 0 inchangé
 - `rate-limit.test.ts` : bucket `tts`
 
 ## Critères d'acceptation

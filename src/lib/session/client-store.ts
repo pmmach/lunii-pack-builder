@@ -34,7 +34,7 @@ export interface SessionState {
   packCover: PackCoverSource;
   /** Durée (s) de l'intro par défaut, commune à toutes les histoires du pack (0–30). */
   defaultTitleClipSeconds: number;
-  /** Mode d'intro pack-wide. Défaut "clip". */
+  /** Mode d'intro pack-wide. Défaut "tts". */
   introMode: IntroMode;
   step: WorkshopStep;
   downloadUrl?: string;
@@ -60,7 +60,7 @@ export function loadSession(sessionId: string): SessionState | null {
       defaultTitleClipSeconds: clampTitleClipSeconds(
         parsed.defaultTitleClipSeconds ?? DEFAULT_TITLE_CLIP_SECONDS
       ),
-      introMode: parsed.introMode === "tts" ? "tts" : "clip",
+      introMode: parsed.introMode === "clip" ? "clip" : "tts",
     };
   } catch {
     return null;

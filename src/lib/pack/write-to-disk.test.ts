@@ -47,6 +47,7 @@ describe("writePackToDisk", () => {
       author: "Auteur Test",
       description: "Desc",
     });
+    pack = { ...pack, introMode: "clip" };
     pack = addStoryToPack(pack, {
       id: "1",
       title: "Première histoire",
@@ -116,6 +117,7 @@ describe("writePackToDisk", () => {
       author: "Auteur Test",
       description: "Desc",
     });
+    pack = { ...pack, introMode: "clip" };
     pack = addStoryToPack(pack, {
       id: "1",
       title: "Histoire 1",
@@ -177,6 +179,7 @@ describe("writePackToDisk", () => {
     });
     pack = {
       ...pack,
+      introMode: "clip",
       defaultTitleClipSeconds: 0,
     };
     pack = addStoryToPack(pack, {
@@ -206,6 +209,7 @@ describe("writePackToDisk", () => {
   it("gère les collisions de noms de dossiers", async () => {
     tmpDir = await mkdtemp(path.join(os.tmpdir(), "lunii-pack-"));
     let pack1 = createPackDraft("s1", { title: "Même Titre", author: "A" });
+    pack1 = { ...pack1, introMode: "clip" };
     pack1 = addStoryToPack(pack1, {
       id: "1",
       title: "H",
@@ -216,6 +220,7 @@ describe("writePackToDisk", () => {
     expect(r1.ok).toBe(true);
 
     let pack2 = createPackDraft("s2", { title: "Même Titre", author: "A" });
+    pack2 = { ...pack2, introMode: "clip" };
     pack2 = addStoryToPack(pack2, {
       id: "2",
       title: "H",
@@ -229,7 +234,7 @@ describe("writePackToDisk", () => {
     expect(path.basename(r2.data.packDir)).toBe("meme-titre-2");
   }, 30_000);
 
-  it("génère des intros TTS pour une histoire", async () => {
+  it("génère des intros TTS par défaut pour une histoire", async () => {
     tmpDir = await mkdtemp(path.join(os.tmpdir(), "lunii-pack-"));
     const fake: TtsProvider = {
       id: "azure",
@@ -244,7 +249,6 @@ describe("writePackToDisk", () => {
       title: "Pack TTS",
       author: "Auteur",
     });
-    pack = { ...pack, introMode: "tts" };
     pack = addStoryToPack(pack, {
       id: "1",
       title: "Histoire Magique",

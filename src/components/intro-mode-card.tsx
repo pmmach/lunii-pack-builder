@@ -89,18 +89,6 @@ export function IntroModeCard({
           className="gap-3"
         >
           <label
-            htmlFor="intro-mode-clip"
-            className="hover:bg-muted/40 flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60"
-          >
-            <RadioGroupItem id="intro-mode-clip" value="clip" />
-            <span className="space-y-0.5">
-              <span className="block text-sm font-medium">Découpée</span>
-              <span className="text-muted-foreground block text-xs">
-                Extrait du début de chaque histoire
-              </span>
-            </span>
-          </label>
-          <label
             htmlFor="intro-mode-tts"
             className="hover:bg-muted/40 flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60"
           >
@@ -113,6 +101,18 @@ export function IntroModeCard({
               <span className="block text-sm font-medium">Synthétique</span>
               <span className="text-muted-foreground block text-xs">
                 Voix enfant qui lit le titre
+              </span>
+            </span>
+          </label>
+          <label
+            htmlFor="intro-mode-clip"
+            className="hover:bg-muted/40 flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60"
+          >
+            <RadioGroupItem id="intro-mode-clip" value="clip" />
+            <span className="space-y-0.5">
+              <span className="block text-sm font-medium">Découpée</span>
+              <span className="text-muted-foreground block text-xs">
+                Extrait du début de chaque histoire
               </span>
             </span>
           </label>

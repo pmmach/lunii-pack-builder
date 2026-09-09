@@ -8,9 +8,9 @@ Construire, à partir d'une ou plusieurs histoires préparées, le graphe STUdio
 
 ## Règle par défaut pour l'intro (`titleAudioPath`)
 
-Le besoin initial distingue une "intro" (jouée en sélectionnant l'histoire) du contenu de l'histoire (`storyAudioPath`). Deux modes pack-wide (`PackDraft.introMode`, défaut `"clip"`) — détail TTS dans `specs/07-intro-tts.md` :
+Le besoin initial distingue une "intro" (jouée en sélectionnant l'histoire) du contenu de l'histoire (`storyAudioPath`). Deux modes pack-wide (`PackDraft.introMode`, défaut `"tts"`) — détail TTS dans `specs/07-intro-tts.md` :
 
-### Mode `clip` (défaut, comportement historique)
+### Mode `clip` (comportement historique)
 
 En l'absence de sélection explicite d'un extrait dédié par l'utilisateur dans l'éditeur (spec 04) :
 
@@ -19,7 +19,7 @@ En l'absence de sélection explicite d'un extrait dédié par l'utilisateur dans
 - Si N = 0 : **pas d'intro** (`titleAudioPath` reste absent → `audio: null` sur le nœud `cover`/`menu`).
 - Si l'utilisateur a explicitement fourni un `titleAudioPath` distinct (généré par l'éditeur de la spec 04 via un second appel à `trimAudio`), celui-ci est utilisé tel quel (le réglage N ne s'applique pas).
 
-### Mode `tts`
+### Mode `tts` (défaut)
 
 > intro = synthèse vocale cloud du **titre** de l'histoire (et du titre du pack si multi-histoires), écrite en MP3 dans `workspace/<sessionId>/tts/`.
 
@@ -47,7 +47,7 @@ export interface PackDraft {
   coverImagePath: string;       // vignette du pack (par défaut : cover de la 1ère histoire) ; utilisée seulement si >1 histoire (cf. studio-format.ts)
   titleAudioPath?: string;       // intro du pack (optionnel) ; utilisée seulement si >1 histoire
   defaultTitleClipSeconds?: number; // durée (s) de l'intro par défaut pour toutes les histoires sans titleAudioPath ; 0 = pas d'intro ; défaut 8 ; borné à [0, 30] ; ignoré si introMode === "tts"
-  /** Mode d'intro pack-wide. Défaut "clip". Voir specs/07-intro-tts.md. */
+  /** Mode d'intro pack-wide. Défaut "tts". Voir specs/07-intro-tts.md. */
   introMode?: "clip" | "tts";
   stories: StoryDraft[];
 }
@@ -100,7 +100,7 @@ export async function writePackToDisk(pack: PackDraft, destDir: string): Promise
 
 1. Appeler `validatePackDraft`, retourner l'erreur telle quelle si invalide
 2. Calculer `packSlug = slugify(pack.title)` ; si un dossier `destDir/<packSlug>` existe déjà, suffixer `-2`, `-3`, etc. jusqu'à obtenir un nom libre ; créer `destDir/<packSlug>/assets/`
-3. Résoudre les intros selon `pack.introMode` (défaut `"clip"`) :
+3. Résoudre les intros selon `pack.introMode` (défaut `"tts"`) :
    - **`clip`** : pour chaque histoire sans `titleAudioPath`, générer l'extrait par défaut (N premières secondes selon `pack.defaultTitleClipSeconds`, cf. règle ci-dessus ; si N = 0, ne pas générer d'intro) dans un dossier temporaire `destDir/.tmp-<packSlug>/`
    - **`tts`** : pour chaque histoire, synthétiser le titre via `lib/tts` dans `workspace/<sessionId>/tts/` (cache hash) ; si `stories.length > 1`, synthétiser aussi `pack.titleAudioPath` à partir de `pack.title`
    Puis résoudre un `PackDraft` où chaque histoire a un `titleAudioPath` défini **ou** volontairement absent (mode clip N=0)

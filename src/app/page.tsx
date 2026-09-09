@@ -67,7 +67,7 @@ export default function HomePage() {
         packDescription: "",
         packCover: { type: "auto" },
         defaultTitleClipSeconds: DEFAULT_TITLE_CLIP_SECONDS,
-        introMode: "clip",
+        introMode: "tts",
         step,
       });
       router.push(`/pack/${sessionId}`);

@@ -21,8 +21,10 @@ async function defaultEdgeSynthesize(
   if (typeof Blob !== "undefined" && audio instanceof Blob) {
     return new Uint8Array(await audio.arrayBuffer());
   }
-  // ArrayBuffer or compatible
-  return new Uint8Array(audio as ArrayBuffer);
+  if (audio instanceof ArrayBuffer) {
+    return new Uint8Array(audio);
+  }
+  return new Uint8Array(audio as unknown as ArrayBuffer);
 }
 
 export function createEdgeTtsProvider(deps?: {
