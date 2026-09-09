@@ -40,6 +40,7 @@ export async function trimAudio(
     const probed = await probeDuration(inputPath);
     if (probed.ok && opts.endSeconds >= probed.data - FULL_FILE_END_EPS) {
       try {
+        onProgress?.(5);
         if (path.resolve(inputPath) !== path.resolve(outputPath)) {
           await copyFile(inputPath, outputPath);
         }
@@ -90,6 +91,7 @@ export async function trimAudio(
       command
         .noVideo()
         .output(outputPath)
+        .on("start", () => onProgress?.(1))
         .on("progress", (progress) => {
           if (!onProgress) return;
           if (typeof progress.percent === "number" && progress.percent > 0) {
@@ -103,7 +105,10 @@ export async function trimAudio(
             );
           }
         })
-        .on("end", () => resolve())
+        .on("end", () => {
+          onProgress?.(100);
+          resolve();
+        })
         .on("error", (e) => reject(e))
         .run();
     });

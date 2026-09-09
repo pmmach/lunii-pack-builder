@@ -4,7 +4,7 @@ Contexte : `plan/01-architecture.md` (module `lib/media/`), formats cibles dans 
 
 ## Objectif
 
-Télécharger l'audio/l'image d'un épisode sélectionné dans l'espace de travail de la session, permettre un découpage (trim) de l'audio, générer les vignettes 320x320 et les données de waveform pour l'éditeur visuel (spec 04). La **préparation** (téléchargement + waveform + vignette) est suivie via un tracker de job ; la **découpe** est synchrone (pas de job) pour éviter le coût du polling.
+Télécharger l'audio/l'image d'un épisode sélectionné dans l'espace de travail de la session, permettre un découpage (trim) de l'audio, générer les vignettes 320x320 et les données de waveform pour l'éditeur visuel (spec 04). La **préparation** (téléchargement + waveform + vignette) et la **découpe** sont suivies via un tracker de job, pour que l'UI affiche la progression réelle (file d'attente, ffmpeg, terminé).
 
 ## Espace de travail
 
@@ -162,13 +162,13 @@ export async function withConcurrencyLimit<T>(fn: () => Promise<T>): Promise<T>;
 "use server";
 export async function prepareEpisodeAction(sessionId: string, episode: EpisodeMeta): Promise<Result<{ jobId: string }>>;
 export async function getJobStatusAction(jobId: string): Promise<Result<JobState>>;
-export async function trimEpisodeAction(sessionId: string, episodeId: string, opts: TrimOptions): Promise<Result<{ storyPath: string; durationSeconds: number }>>;
+export async function trimEpisodeAction(sessionId: string, episodeId: string, opts: TrimOptions): Promise<Result<{ jobId: string }>>;
 export async function cropEpisodeCoverAction(sessionId: string, episodeId: string, focus?: { x: number; y: number }): Promise<Result<{ path: string }>>;
 ```
 
 - `prepareEpisodeAction` : crée un job, lance en arrière-plan (sans bloquer la réponse) : vérifie `episode.durationSeconds` contre `env.MAX_EPISODE_DURATION_SECONDS` (sinon `err(..., "EPISODE_TOO_LONG")` immédiat sans créer de job) → télécharge audio → **`ensureMp3` vers `processed/<episodeId>/source.mp3`** (conversion unique si besoin) → image + vignette → waveform sur le MP3 → `updateJob` à chaque étape avec un `message` explicite → statut final `"done"` avec le chemin des fichiers dans `resultRef` (JSON stringifié, `audioPath`/`storyPath` = `source.mp3`, + `durationSeconds`) ou `"error"`
 - **Le ré-encodage lourd (m4a→mp3) a lieu à la préparation**, pas à la validation : `story.mp3` est ensuite produit par `trimEpisodeAction` en copie de flux depuis `source.mp3` (quasi instantané)
-- `trimEpisodeAction` : **synchrone** (attend la fin du traitement et renvoie directement `{ storyPath, durationSeconds }`, pas de `jobId` / polling). Préfère `processed/.../source.mp3` s'il existe, sinon retombe sur `source/.../audio.*`. Enveloppée dans `withConcurrencyLimit`. L'UI peut lancer plusieurs découpes en parallèle (`Promise.all`) ; le sémaphore borne la charge réelle
+- `trimEpisodeAction` : crée un job et lance en arrière-plan (comme `prepareEpisodeAction`) — statut `"pending"` + message « En file d'attente… » tant que le sémaphore n'a pas libéré une place, puis `"running"` avec la progression ffmpeg (10–95) et `"done"` + `resultRef` `{ storyPath, durationSeconds }`. Préfère `processed/.../source.mp3` s'il existe, sinon retombe sur `source/.../audio.*`. Enveloppée dans `withConcurrencyLimit`. L'UI lance plusieurs découpes en parallèle (`Promise.all` + polling `getJobStatusAction`) ; le sémaphore borne la charge réelle
 - `prepareEpisodeAction` : le tout est enveloppé dans `withConcurrencyLimit` ; l'UI lance aussi plusieurs préparations en parallèle pour une sélection multi-épisodes
 
 ## Tests

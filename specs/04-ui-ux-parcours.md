@@ -84,7 +84,7 @@ Si `kind === "episode"` : cette étape est sautée ; l'unique épisode entre dan
 Sous-étapes affichées dans un **Accordion** shadcn (`src/components/ui/accordion.tsx`, Base UI) — **un seul panneau ouvert à la fois** (pas de barre d'onglets : les titres longs Radio France provoquaient chevauchements/troncatures).
 
 **Réglage commun au pack** (au-dessus de l'accordéon) — carte `IntroSettingsCard` (spec 07) :
-- Groupe radio « Intro » : **Découpée** (défaut) / **Synthétique**
+- Groupe radio « Intro » : **Synthétique** (défaut) / **Découpée**
 - Mode découpée : Slider « Durée de l'intro » (0–30 s, pas de 1 s, défaut 8) — valeur portée sur **toutes** les histoires du pack (`SessionState.defaultTitleClipSeconds` → `PackDraft.defaultTitleClipSeconds` à l'export) ; texte d'aide : extrait joué à la sélection, pris au début du contenu découpé ; 0 s = pas d'intro
 - Mode synthétique : slider masqué ; aide « Chaque histoire lira son titre à la sélection » ; bouton aperçu (titre de l'histoire ouverte) ; option désactivée si TTS non configuré côté serveur
 - `SessionState.introMode` → `PackDraft.introMode` à l'export
@@ -105,10 +105,10 @@ Pour chaque histoire :
 2. **Audio** : lecteur avec waveform (`wavesurfer.js`, région de sélection draggable) affichant les peaks retournés par `generateWaveformPeaks` ; poignées début/fin de l'histoire ; texte d'aide rappelant le mode d'intro du pack (« Intro : N s (réglage commun au pack) » ou « Intro : titre lu (voix enfant) »)
 3. **Image** : aperçu carré 320x320 de la vignette (alt descriptif si image présente)
 4. **Progression** pendant les traitements serveur (découpe et export uniquement — la préparation vit dans le couloir ci-dessus) :
-   - **Validation / découpe** : appel synchrone à `trimEpisodeAction` sur `source.mp3` (copie de flux, quasi instantanée) ; plusieurs découpes en parallèle si multi-histoires
+   - **Validation / découpe** : même modèle que le couloir de préparation — `trimEpisodeAction` retourne un `jobId`, polling 1 s jusqu'à `done`/`error`, barre globale = moyenne des progressions **réelles** de chaque histoire (file d'attente, ffmpeg, terminé). Liste par histoire. **Pas d'interpolation artificielle** (pas de rampe 5 % → 20 % ni de creep vers 97 %)
    - **Export** : messages "Assemblage…", "Compression…"
    - À chaque grande étape (`busy === true`) : recentrage sur la carte de progression (`scrollIntoView`)
-   - Pourcentage animé / lissé (plafonné à 97 % avant la fin réelle), avec `message` et `%` visibles
+   - Découpe : `message` et compteur `K/N` issus du tracker. Export : pourcentage animé / lissé (plafonné à 97 % avant la fin réelle)
 
 Bouton "Valider et passer au pack" en bas.
 
@@ -149,6 +149,6 @@ Points de rupture à tester : 375px (mobile), 768px (tablette), 1024px et 1440px
 - [ ] Mode sombre fonctionnel via un toggle (icône soleil/lune dans l'en-tête), contrastes vérifiés dans les deux modes
 - [ ] Aucun écran blanc pendant un chargement (skeletons ou barres de progression partout où une action serveur > 300ms est en cours)
 - [ ] Après "Continuer", la liste d'épisodes disparaît ; on n'y revient que via "Annuler" / "Modifier la sélection"
-- [ ] Pendant préparation (couloir) / découpe / export : barre de progression continue (pas de sauts figés longtemps) ; découpe et export recentrent sur la carte (`scrollIntoView`)
+- [ ] Pendant préparation (couloir) / découpe : barre = moyenne des progressions réelles par histoire (pas de creep artificiel) ; export recentre aussi sur la carte (`scrollIntoView`)
 - [ ] Testé visuellement aux 4 largeurs listées ci-dessus
 - [ ] `npm run lint` et `npm run build` toujours au vert après ajout de l'UI

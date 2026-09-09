@@ -132,8 +132,8 @@ function prepareOverallProgress(items: PrepareItem[]): number {
 }
 
 function prepareItemLabel(item: PrepareItem): string {
-  if (item.status === "done") return "Prête";
-  if (item.status === "queued") return "En file d'attente";
+  if (item.status === "done") return item.message || "Prête";
+  if (item.status === "queued") return item.message || "En file d'attente";
   if (item.status === "error") return item.message || "Échec";
   return item.message || "En cours…";
 }
@@ -351,6 +351,68 @@ function PrepareEpisodeList({ items }: { items: PrepareItem[] }) {
   );
 }
 
+function TrimProgressCard({ items }: { items: PrepareItem[] }) {
+  const total = items.length;
+  const doneCount = items.filter((item) => item.status === "done").length;
+  const runningCount = items.filter((item) => item.status === "running").length;
+  const overall = prepareOverallProgress(items);
+  const countLabel = total > 1 ? `${total} histoires` : "1 histoire";
+  const onlyItem = total === 1 ? items[0] : undefined;
+  const summary =
+    total === 0
+      ? "Découpe…"
+      : onlyItem
+        ? onlyItem.status === "done"
+          ? "Histoire découpée"
+          : prepareItemLabel(onlyItem)
+        : doneCount === total
+          ? "Toutes les histoires sont découpées"
+          : `${doneCount} sur ${total} découpées`;
+
+  return (
+    <Card className="border-primary/40 scroll-mt-20">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-xl">
+          <Loader2
+            className="size-5 shrink-0 animate-spin motion-reduce:animate-none"
+            aria-hidden
+          />
+          Découpe de {countLabel}
+        </CardTitle>
+        <CardDescription>
+          Copie de la plage choisie vers l&apos;audio final de chaque histoire.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-2" aria-busy="true">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-medium" aria-live="polite">
+              {summary}
+              {runningCount > 0 && total > 1
+                ? ` · ${runningCount} en cours`
+                : ""}
+            </p>
+            <span className="text-muted-foreground text-sm tabular-nums">
+              {doneCount}/{total || "—"}
+            </span>
+          </div>
+          <Progress
+            value={overall}
+            className="[&_[data-slot=progress-track]]:h-2"
+            aria-valuetext={summary}
+          />
+        </div>
+        <PrepareEpisodeList items={items} />
+        {total > 1 ? (
+          <p className="text-muted-foreground text-sm">
+            Les suivantes commencent dès qu&apos;une place se libère.
+          </p>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
 function SortableStoryItem({
   story,
   onRemove,
@@ -517,6 +579,7 @@ export default function PackWorkshopPage() {
   const [preparePhase, setPreparePhase] = useState<PreparePhase>("idle");
   const [prepareError, setPrepareError] = useState<string | null>(null);
   const [prepareItems, setPrepareItems] = useState<PrepareItem[]>([]);
+  const [trimItems, setTrimItems] = useState<PrepareItem[]>([]);
   const [ttsConfigured, setTtsConfigured] = useState(false);
   const autoPrepared = useRef(false);
   const cancelledRef = useRef(false);
@@ -893,77 +956,142 @@ export default function PackWorkshopPage() {
 
   async function validateStoriesAndGoToPack() {
     if (!state) return;
-    setBusy(true);
-    setProgress(5);
-    setProgressMsg("Découpe audio…");
-    try {
-      const targets = state.selectedEpisodeIds
-        .map((epId) => {
-          const draft = draftStories[epId];
-          const ep = episodes.find((e) => e.id === epId);
-          if (!draft || !ep) return null;
-          return { epId, draft, ep };
-        })
-        .filter(
-          (t): t is NonNullable<typeof t> => t !== null
-        );
+    const targets = state.selectedEpisodeIds
+      .map((epId) => {
+        const draft = draftStories[epId];
+        const ep = episodes.find((e) => e.id === epId);
+        if (!draft || !ep) return null;
+        return { epId, draft, ep };
+      })
+      .filter((t): t is NonNullable<typeof t> => t !== null);
 
-      if (targets.length === 0) {
-        toast.error("Aucune histoire prête");
+    if (targets.length === 0) {
+      toast.error("Aucune histoire prête");
+      return;
+    }
+
+    const patchTrimItem = (episodeId: string, patch: Partial<PrepareItem>) => {
+      setTrimItems((prev) =>
+        prev.map((item) =>
+          item.episodeId === episodeId ? { ...item, ...patch } : item
+        )
+      );
+    };
+
+    setBusy(true);
+    setTrimItems(
+      targets.map((t) => ({
+        episodeId: t.epId,
+        title: t.draft.title,
+        status: "queued" as const,
+        progress: 0,
+        message: "En file d'attente",
+      }))
+    );
+
+    try {
+      const started = await Promise.all(
+        targets.map(async (t) => {
+          const trim = await trimEpisodeAction(sessionId, t.epId, {
+            startSeconds: t.draft.start,
+            endSeconds: t.draft.end,
+          });
+          return { ...t, trim };
+        })
+      );
+
+      let startError: string | null = null;
+      for (const row of started) {
+        if (!row.trim.ok) {
+          patchTrimItem(row.epId, {
+            status: "error",
+            message: row.trim.error,
+          });
+          startError ??= row.trim.error;
+        }
+      }
+      if (startError) {
+        toast.error(startError);
         return;
       }
 
-      setProgressMsg(
-        targets.length > 1
-          ? `Découpe (${targets.length} épisodes)…`
-          : `Découpe : ${targets[0]?.draft.title ?? "audio"}`
-      );
-      setProgress(20);
-
-      // Progression UI pendant les trims parallèles (sinon la barre reste figée
-      // pendant 1–2 min sur un ré-encodage m4a→mp3).
-      const trimProgress = new Map<string, number>();
-      for (const t of targets) trimProgress.set(t.epId, 0);
-      const refreshTrimProgress = () => {
-        const values = [...trimProgress.values()];
-        const avg =
-          values.reduce((a, b) => a + b, 0) / Math.max(1, values.length);
-        setProgress(20 + Math.round(avg * 0.7));
-      };
-
       const results = await Promise.all(
-        targets.map(async ({ epId, draft, ep }) => {
-          setProgressMsg(
-            targets.length > 1
-              ? `Découpe (${targets.length} épisodes)…`
-              : `Découpe : ${draft.title}`
-          );
-          const trim = await trimEpisodeAction(sessionId, epId, {
-            startSeconds: draft.start,
-            endSeconds: draft.end,
+        started.map(async ({ epId, draft, ep, trim }) => {
+          if (!trim.ok) return { epId, draft, ep, waited: null as null };
+          const waited = await waitJob(trim.data.jobId, (p, msg, jobStatus) => {
+            patchTrimItem(epId, {
+              progress: p,
+              message: msg ?? "Découpe…",
+              status: jobStatus
+                ? jobPollToItemStatus(jobStatus)
+                : "running",
+            });
           });
-          trimProgress.set(epId, 100);
-          refreshTrimProgress();
-          return { epId, draft, ep, trim };
+          return { epId, draft, ep, waited };
         })
       );
 
       const prepared: PreparedStory[] = [];
       for (const row of results) {
-        if (!row.trim.ok) {
-          toast.error(row.trim.error);
+        if (!row.waited) continue;
+        if (!row.waited.ok) {
+          patchTrimItem(row.epId, {
+            status: "error",
+            message: row.waited.error,
+          });
+          toast.error(row.waited.error);
           return;
         }
 
+        let ref: { storyPath: string; durationSeconds: number } | null = null;
+        if (row.waited.resultRef) {
+          try {
+            const parsed: unknown = JSON.parse(row.waited.resultRef);
+            if (
+              typeof parsed === "object" &&
+              parsed !== null &&
+              "storyPath" in parsed &&
+              "durationSeconds" in parsed
+            ) {
+              const rec = parsed as {
+                storyPath: unknown;
+                durationSeconds: unknown;
+              };
+              if (
+                typeof rec.storyPath === "string" &&
+                typeof rec.durationSeconds === "number"
+              ) {
+                ref = {
+                  storyPath: rec.storyPath,
+                  durationSeconds: rec.durationSeconds,
+                };
+              }
+            }
+          } catch {
+            ref = null;
+          }
+        }
+        if (!ref?.storyPath) {
+          const message = "Découpe incomplète pour cette histoire.";
+          patchTrimItem(row.epId, { status: "error", message });
+          toast.error(message);
+          return;
+        }
+
+        patchTrimItem(row.epId, {
+          status: "done",
+          progress: 100,
+          message: "Découpée",
+        });
         prepared.push({
           episode: row.ep,
           title: row.draft.title,
-          storyAudioPath: row.trim.data.storyPath,
+          storyAudioPath: ref.storyPath,
           coverImagePath: row.draft.coverPath,
           peaks: row.draft.peaks,
           trimStart: row.draft.start,
           trimEnd: row.draft.end,
-          durationSeconds: row.trim.data.durationSeconds,
+          durationSeconds: ref.durationSeconds,
         });
       }
 
@@ -975,6 +1103,7 @@ export default function PackWorkshopPage() {
       persist({ ...state, stories: prepared, step: 4 });
     } finally {
       setBusy(false);
+      setTrimItems([]);
       setProgressMsg("");
       setProgress(0);
     }
@@ -983,7 +1112,7 @@ export default function PackWorkshopPage() {
   async function doExport() {
     if (!state || state.stories.length === 0) return;
     setBusy(true);
-    const introMode = state.introMode === "tts" ? "tts" : "clip";
+    const introMode = state.introMode === "clip" ? "clip" : "tts";
     setProgressMsg(
       introMode === "tts" ? "Voix des titres…" : "Assemblage du pack…"
     );
@@ -1073,7 +1202,7 @@ export default function PackWorkshopPage() {
   const introSeconds = clampTitleClipSeconds(
     state.defaultTitleClipSeconds ?? DEFAULT_TITLE_CLIP_SECONDS
   );
-  const introMode = state.introMode === "tts" ? "tts" : "clip";
+  const introMode = state.introMode === "clip" ? "clip" : "tts";
   const previewTitle =
     (openStoryId && draftStories[openStoryId]?.title) ||
     episodes.find((e) => e.id === openStoryId)?.title ||
@@ -1081,7 +1210,8 @@ export default function PackWorkshopPage() {
     "";
   const hasDrafts = Object.keys(draftStories).length > 0;
   const showSelection = step === 2 && preparePhase === "idle";
-  const showEdition = step === 3 && hasDrafts && preparePhase === "idle";
+  const showEdition =
+    step === 3 && hasDrafts && preparePhase === "idle" && !busy;
   const showCorridor =
     preparePhase === "running" ||
     preparePhase === "error" ||
@@ -1127,7 +1257,13 @@ export default function PackWorkshopPage() {
       </header>
 
       <main className="mx-auto max-w-4xl space-y-6 px-4 py-6">
-        {busy && preparePhase === "idle" && (
+        {busy && trimItems.length > 0 ? (
+          <div ref={progressCardRef}>
+            <TrimProgressCard items={trimItems} />
+          </div>
+        ) : null}
+
+        {busy && trimItems.length === 0 && preparePhase === "idle" && (
           <Card ref={progressCardRef} className="border-primary/40 scroll-mt-20">
             <CardContent className="space-y-2 pt-6">
               <div className="flex items-center justify-between gap-3">

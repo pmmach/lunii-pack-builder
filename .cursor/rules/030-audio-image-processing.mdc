@@ -9,7 +9,7 @@ alwaysApply: false
 - Toujours traiter les fichiers via des **streams** (ffmpeg/sharp pipelines) plutôt que de charger un fichier audio/image entier en mémoire — les épisodes de podcast peuvent faire plusieurs dizaines de Mo.
 - Toute opération ffmpeg/sharp s'exécute dans le dossier de travail de la session (`workspace/<sessionId>/...`), jamais dans un répertoire partagé/temp global non nettoyé.
 - Vérifier le type MIME réel du fichier téléchargé (pas seulement l'extension de l'URL) avant de le passer à ffmpeg/sharp.
-- Les opérations longues (téléchargement, préparation d'épisode) doivent exposer une progression exploitable par l'UI (tracker de job). La **découpe** (`trimEpisodeAction`) est volontairement **synchrone** (retourne le résultat sans job) pour éviter le polling — elle reste bornée par `withConcurrencyLimit`.
+- Les opérations longues (téléchargement, préparation d'épisode, découpe) doivent exposer une progression exploitable par l'UI (tracker de job). La découpe (`trimEpisodeAction`) crée un job et reporte la progression ffmpeg / file d'attente ; elle reste bornée par `withConcurrencyLimit`.
 - Formats de sortie (voir `requirements/02-format-pack-lunii.md`) :
   - Images : JPEG, 320x320, recadrage centré par défaut
   - Audio : MP3 — **pas** de normalisation loudness ; prioriser `copyFile` / `-c:a copy` si la source est déjà MP3, sinon ré-encodage lame rapide (~44.1 kHz / 128 kbps)

@@ -32,7 +32,7 @@ Depuis le cadrage, chaque phase ci-dessous est détaillée en spec d'implémenta
 
 ## Phase 3 — Pipeline média + pack simple (histoire unique)
 
-- Téléchargement audio, trim ffmpeg (copie / ré-encodage rapide), recadrage image sharp, génération de waveform, suivi de progression (jobs pour la préparation, découpe synchrone)
+- Téléchargement audio, trim ffmpeg (copie / ré-encodage rapide), recadrage image sharp, génération de waveform, suivi de progression (jobs pour la préparation et la découpe)
 - `lib/pack/builder.ts` + `studio-format.ts` + `zip.ts` : génération directe du format STUdio final (`story.json` + `assets/`, cf. `requirements/02-format-pack-lunii.md`) + export `.zip`
 - Test end-to-end manuel : import du zip généré dans [Lunii Admin Builder](https://lunii-admin-builder.pages.dev/) → vérifier que l'import fonctionne et que le pack s'installe sur l'appareil
 

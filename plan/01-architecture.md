@@ -62,7 +62,7 @@ Utilisateur importe le .zip dans Lunii Admin Builder / Web → installe sur l'ap
   - `zip.ts` : compresse le contenu à la **racine** du `.zip` via `archiver` (pas de dossier packSlug wrapper)
 
 - **`lib/jobs/`**
-  - Tracker de progression en mémoire pour la **préparation** (téléchargement / waveform), exposé à l'UI via polling ; la **découpe** est synchrone (Server Action)
+  - Tracker de progression en mémoire pour la **préparation** et la **découpe**, exposé à l'UI via polling
 
 ## Stockage de session
 

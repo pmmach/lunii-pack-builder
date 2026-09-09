@@ -259,79 +259,139 @@ export async function getJobStatusAction(
   return ok(job);
 }
 
+function mapTrimFfmpegProgress(percent: number): number {
+  const clamped = Math.min(100, Math.max(0, percent));
+  return 10 + Math.round((clamped / 100) * 85);
+}
+
 export async function trimEpisodeAction(
   sessionId: string,
   episodeId: string,
   opts: TrimOptions
-): Promise<Result<{ storyPath: string; durationSeconds: number }>> {
+): Promise<Result<{ jobId: string }>> {
   const safeEpisodeId = slugify(episodeId) || "episode";
   const label = `trim:${safeEpisodeId}`;
+  const jobId = createJob();
+  updateJob(jobId, {
+    status: "pending",
+    progress: 0,
+    message: "En file d'attente…",
+  });
   debugMedia("trim:action-enter", {
     episode: safeEpisodeId,
+    jobId,
     startSec: Math.round(opts.startSeconds * 10) / 10,
     endSec: Math.round(opts.endSeconds * 10) / 10,
   });
 
-  return withConcurrencyLimit(async () => {
+  void withConcurrencyLimit(async () => {
     const t0 = Date.now();
-    const sourceDir = path.join(
-      workspaceRoot(sessionId),
-      "source",
-      safeEpisodeId
-    );
-    const processedDir = path.join(
-      workspaceRoot(sessionId),
-      "processed",
-      safeEpisodeId
-    );
-    await mkdir(processedDir, { recursive: true });
-
-    const { access, readdir, stat } = await import("node:fs/promises");
-    const mp3Path = path.join(processedDir, SOURCE_MP3_NAME);
-    let inputPath = mp3Path;
-    let inputLabel = SOURCE_MP3_NAME;
-
     try {
-      await access(mp3Path);
-    } catch {
-      // Fallback (anciennes sessions / prepare sans conversion) : audio brut.
-      const files = await readdir(sourceDir).catch(() => [] as string[]);
-      const audioFile = files.find((f) => f.startsWith("audio."));
-      if (!audioFile) {
-        debugMedia("trim:action-missing", { episode: safeEpisodeId });
-        return err("Audio source introuvable", "SOURCE_MISSING");
+      updateJob(jobId, {
+        status: "running",
+        progress: 8,
+        message: "Découpe audio…",
+      });
+
+      const sourceDir = path.join(
+        workspaceRoot(sessionId),
+        "source",
+        safeEpisodeId
+      );
+      const processedDir = path.join(
+        workspaceRoot(sessionId),
+        "processed",
+        safeEpisodeId
+      );
+      await mkdir(processedDir, { recursive: true });
+
+      const { access, readdir, stat } = await import("node:fs/promises");
+      const mp3Path = path.join(processedDir, SOURCE_MP3_NAME);
+      let inputPath = mp3Path;
+      let inputLabel = SOURCE_MP3_NAME;
+
+      try {
+        await access(mp3Path);
+      } catch {
+        // Fallback (anciennes sessions / prepare sans conversion) : audio brut.
+        const files = await readdir(sourceDir).catch(() => [] as string[]);
+        const audioFile = files.find((f) => f.startsWith("audio."));
+        if (!audioFile) {
+          debugMedia("trim:action-missing", { episode: safeEpisodeId });
+          updateJob(jobId, {
+            status: "error",
+            message: "Audio source introuvable",
+            errorCode: "SOURCE_MISSING",
+          });
+          return;
+        }
+        inputPath = path.join(sourceDir, audioFile);
+        inputLabel = audioFile;
       }
-      inputPath = path.join(sourceDir, audioFile);
-      inputLabel = audioFile;
-    }
 
-    const outputPath = path.join(processedDir, "story.mp3");
-    const fileStat = await stat(inputPath).catch(() => null);
-    debugMedia("trim:action-run", {
-      episode: safeEpisodeId,
-      file: inputLabel,
-      bytes: fileStat?.size ?? -1,
-    });
+      const outputPath = path.join(processedDir, "story.mp3");
+      const fileStat = await stat(inputPath).catch(() => null);
+      debugMedia("trim:action-run", {
+        episode: safeEpisodeId,
+        jobId,
+        file: inputLabel,
+        bytes: fileStat?.size ?? -1,
+      });
 
-    const result = await trimAudio(inputPath, outputPath, opts);
-    if (!result.ok) {
+      const result = await trimAudio(
+        inputPath,
+        outputPath,
+        opts,
+        (percent) => {
+          const pct = Math.min(100, Math.round(percent));
+          updateJob(jobId, {
+            progress: mapTrimFfmpegProgress(pct),
+            message: `Découpe audio… ${pct}%`,
+          });
+        }
+      );
+      if (!result.ok) {
+        debugMedia("trim:action-fail", {
+          episode: safeEpisodeId,
+          ms: Date.now() - t0,
+        });
+        updateJob(jobId, {
+          status: "error",
+          message: result.error,
+          errorCode: result.code,
+        });
+        return;
+      }
+
+      updateJob(jobId, {
+        status: "done",
+        progress: 100,
+        message: "Découpée",
+        resultRef: JSON.stringify({
+          storyPath: result.data.filePath,
+          durationSeconds: result.data.durationSeconds,
+        }),
+      });
+      debugMedia("trim:action-ok", {
+        episode: safeEpisodeId,
+        outDurationSec: Math.round(result.data.durationSeconds * 10) / 10,
+        ms: Date.now() - t0,
+      });
+    } catch (e) {
+      updateJob(jobId, {
+        status: "error",
+        message:
+          e instanceof Error ? e.message : "Erreur inattendue de découpe",
+        errorCode: "TRIM_FAILED",
+      });
       debugMedia("trim:action-fail", {
         episode: safeEpisodeId,
         ms: Date.now() - t0,
       });
-      return result;
     }
-
-    debugMedia("trim:action-ok", {
-      episode: safeEpisodeId,
-      outDurationSec: Math.round(result.data.durationSeconds * 10) / 10,
-      ms: Date.now() - t0,
-    });
-    return ok({
-      storyPath: result.data.filePath,
-      durationSeconds: result.data.durationSeconds,
-    });
   }, label);
+
+  return ok({ jobId });
 }
 
 export async function cropEpisodeCoverAction(

@@ -36,12 +36,20 @@ describe("trimAudio", () => {
     expect(sourceDuration.ok).toBe(true);
     if (!sourceDuration.ok) return;
 
-    const result = await trimAudio(fixture, out, {
-      startSeconds: 0,
-      endSeconds: sourceDuration.data,
-    });
+    const percents: number[] = [];
+    const result = await trimAudio(
+      fixture,
+      out,
+      {
+        startSeconds: 0,
+        endSeconds: sourceDuration.data,
+      },
+      (percent) => percents.push(percent)
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
+    expect(percents.at(-1)).toBe(100);
+    expect(percents.some((p) => p > 0 && p < 100)).toBe(true);
 
     const probed = await probeDuration(out);
     expect(probed.ok).toBe(true);
