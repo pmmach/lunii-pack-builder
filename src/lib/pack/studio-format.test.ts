@@ -136,7 +136,7 @@ describe("buildStudioPack — 1 histoire", () => {
 });
 
 describe("buildStudioPack — plusieurs histoires", () => {
-  it("construit un menu racine + un menu/story par histoire avec retour menu", () => {
+  it("construit un menu racine + un menu/story par histoire ; Maison remonte d'un cran", () => {
     let pack = createPackDraft("sess", { title: "Pack", author: "Auteur" });
     pack = addStoryToPack(pack, {
       id: "1",
@@ -157,23 +157,33 @@ describe("buildStudioPack — plusieurs histoires", () => {
     const { studioPack } = buildStudioPack(pack);
 
     expect(studioPack.stageNodes).toHaveLength(5); // cover + 2*(menu+story)
-    expect(studioPack.actionNodes).toHaveLength(3); // racine + 1 par histoire
+    // racine + 1 par histoire + backToCover
+    expect(studioPack.actionNodes).toHaveLength(4);
 
     const [rootCover] = studioPack.stageNodes;
     if (!rootCover) throw new Error("Noeud cover manquant");
     expect(rootCover.type).toBe("cover");
     expect(rootCover.uuid).toBe(pack.uuid);
     expect(rootCover.audio).toBeTruthy();
+    expect(rootCover.homeTransition).toBeNull();
 
     const rootAction = studioPack.actionNodes.find(
       (a) => a.id === rootCover.okTransition?.actionNode
     );
     expect(rootAction?.options).toHaveLength(2);
 
+    const backToCoverAction = studioPack.actionNodes.find(
+      (a) => a.options.length === 1 && a.options[0] === pack.uuid
+    );
+    if (!backToCoverAction) throw new Error("Action menu→cover manquante");
+
     const menus = studioPack.stageNodes.filter((n) => n.type === "menu");
     expect(menus).toHaveLength(2);
     menus.forEach((menu) => {
-      expect(menu.homeTransition).toBeNull();
+      expect(menu.homeTransition).toEqual({
+        actionNode: backToCoverAction.id,
+        optionIndex: 0,
+      });
       expect(menu.image).toBeTruthy();
     });
 

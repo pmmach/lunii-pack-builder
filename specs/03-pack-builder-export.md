@@ -86,9 +86,9 @@ Pure (aucun accès disque) : `buildStudioPack` construit uniquement l'objet JSON
 
 - `randomAssetId()` génère un identifiant de 10 caractères alphanumériques (imite le nommage observé dans un pack réel, ex: `1Lh78QsHxV`) ; chaque asset copié reçoit un nom `<randomAssetId()><extension d'origine>`
 - **1 histoire** : stage node `cover` (uuid = `pack.uuid`, `squareOne: true`, image+intro de **cette histoire**) → action `toStory` → stage node `story` (image `null`) → action `backToCover` (options: `[cover]`) ; sur le story, **`okTransition` = `homeTransition` = backToCover** (équivalent `onEnd: "back"`, évite l'erreur SD en fin d'autoplay). Total : 2 stage nodes, **2** action nodes
-- **N histoires (N>1)** : `cover` (image/intro du **pack**) → action racine (N options) → pour chaque histoire : `menu` (image/intro, `homeTransition: null`) → action → `story` (image `null`) avec **`okTransition` = `homeTransition` = `{ actionNode: <action racine>, optionIndex: <index> }`**. Total : 1 + 2N stage nodes, N+1 action nodes
+- **N histoires (N>1)** : `cover` (image/intro du **pack**, `homeTransition: null`) → action racine (N options) → pour chaque histoire : `menu` (image/intro, **`homeTransition` → action `backToCover`**) → action → `story` (image `null`) avec **`okTransition` = `homeTransition` = `{ actionNode: <action racine>, optionIndex: <index> }`**. Total : 1 + 2N stage nodes, **N+2** action nodes (racine + N menus→story + backToCover)
 - `controlSettings` fixes : `{wheel:true,ok:true,home:true,pause:false,autoplay:false}` pour `cover`/`menu`, `{wheel:false,ok:false,home:true,pause:true,autoplay:true}` pour `story`
-- Sur `cover`/`menu` : `homeTransition` reste `null` (Maison → bibliothèque appareil)
+- Maison remonte d'un cran : `story` → `menu`, `menu` → `cover`, `cover` → bibliothèque appareil (`homeTransition: null`)
 
 ## Écriture sur disque (`src/lib/pack/write-to-disk.ts`)
 
@@ -150,7 +150,7 @@ export async function exportPackAction(pack: PackDraft): Promise<Result<{ downlo
 ## Tests
 
 - `builder.test.ts` : construit un `PackDraft` avec 2 histoires, teste `reorderStories`, `removeStoryFromPack`, et les cas d'invalidité de `validatePackDraft` (titre vide, auteur vide, aucune histoire, fichier manquant)
-- `studio-format.test.ts` : vérifie le graphe pour 1 histoire (2 stage nodes, **2** action nodes, `okTransition`/`homeTransition` du story → cover) et pour plusieurs histoires (1 cover + N×(menu+story), N+1 action nodes, `okTransition` = `homeTransition` vers le menu racine)
+- `studio-format.test.ts` : vérifie le graphe pour 1 histoire (2 stage nodes, **2** action nodes, `okTransition`/`homeTransition` du story → cover) et pour plusieurs histoires (1 cover + N×(menu+story), **N+2** action nodes, story → menu via action racine, menu → cover via `backToCover`)
 - `write-to-disk.test.ts` : dossier temporaire + fixtures ; vérifie `assets/` + `story.json`, références d'assets cohérentes, collisions de noms, et les transitions de retour menu
 - `zip.test.ts` : zippe un dossier de test (`story.json` + `assets/`), relit avec `yauzl` pour vérifier les entrées à la racine (pas de préfixe `<packSlug>/`)
 

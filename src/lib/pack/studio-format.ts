@@ -102,8 +102,9 @@ export function randomAssetId(length = 10): string {
  * - Plusieurs histoires : le noeud "cover" (racine) porte l'image/intro du
  *   pack, chaque histoire devient un noeud "menu" intermédiaire (sa propre
  *   image/intro) pointant vers son noeud "story" (le contenu audio seul).
- *   En fin de lecture, chaque story revient au menu racine (okTransition =
- *   homeTransition).
+ *   Maison remonte d'un cran : story → menu, menu → cover, cover →
+ *   bibliothèque (homeTransition null). En fin de lecture, chaque story
+ *   revient à son menu (okTransition = homeTransition).
  */
 export function buildStudioPack(pack: PackDraft): {
   studioPack: StudioPack;
@@ -180,6 +181,14 @@ export function buildStudioPack(pack: PackDraft): {
     });
   } else {
     const rootActionUuid = uuidv4();
+    const backToCoverActionUuid = uuidv4();
+
+    // Maison sur un menu intermédiaire : remonte d'un cran vers le cover
+    // (seul le cover a homeTransition: null → bibliothèque appareil).
+    const backToCover: StudioTransition = {
+      actionNode: backToCoverActionUuid,
+      optionIndex: 0,
+    };
 
     stageNodes.push({
       uuid: packUuid,
@@ -201,9 +210,9 @@ export function buildStudioPack(pack: PackDraft): {
       const leafUuid = uuidv4();
       rootOptions.push(menuUuid);
 
-      // Retour au menu racine (onEnd: "back") : okTransition = homeTransition
-      // pour que la fin d'autoplay suive la même destination que le bouton Maison.
-      const backToRoot: StudioTransition = {
+      // Retour au menu de l'histoire (onEnd: "back") : okTransition =
+      // homeTransition pour que la fin d'autoplay suive le bouton Maison.
+      const backToMenu: StudioTransition = {
         actionNode: rootActionUuid,
         optionIndex: index,
       };
@@ -215,7 +224,7 @@ export function buildStudioPack(pack: PackDraft): {
         type: "menu",
         name: menuUuid,
         okTransition: { actionNode: menuActionUuid, optionIndex: 0 },
-        homeTransition: null,
+        homeTransition: backToCover,
         controlSettings: MENU_CONTROL_SETTINGS,
       });
 
@@ -232,8 +241,8 @@ export function buildStudioPack(pack: PackDraft): {
         audio: registerAsset(story.storyAudioPath),
         type: "story",
         name: leafUuid,
-        okTransition: backToRoot,
-        homeTransition: backToRoot,
+        okTransition: backToMenu,
+        homeTransition: backToMenu,
         controlSettings: STORY_CONTROL_SETTINGS,
       });
     });
@@ -243,6 +252,13 @@ export function buildStudioPack(pack: PackDraft): {
       uuid: rootActionUuid,
       name: rootActionUuid,
       options: rootOptions,
+    });
+
+    actionNodes.push({
+      id: backToCoverActionUuid,
+      uuid: backToCoverActionUuid,
+      name: backToCoverActionUuid,
+      options: [packUuid],
     });
   }
 

@@ -141,21 +141,30 @@ describe("writePackToDisk", () => {
 
     // cover racine + (menu + story) par histoire = 1 + 2*2 = 5
     expect(studioPack.stageNodes).toHaveLength(5);
-    // action racine + une action par histoire = 1 + 2 = 3
-    expect(studioPack.actionNodes).toHaveLength(3);
+    // action racine + une action par histoire + backToCover = 1 + 2 + 1 = 4
+    expect(studioPack.actionNodes).toHaveLength(4);
 
     const rootCover = studioPack.stageNodes.find((n) => n.type === "cover");
     expect(rootCover?.uuid).toBe(pack.uuid);
+    expect(rootCover?.homeTransition).toBeNull();
     const rootAction = studioPack.actionNodes.find(
       (a) => a.id === rootCover?.okTransition?.actionNode
     );
     expect(rootAction?.options).toHaveLength(2);
 
+    const backToCoverAction = studioPack.actionNodes.find(
+      (a) => a.options.length === 1 && a.options[0] === pack.uuid
+    );
+    expect(backToCoverAction).toBeDefined();
+
     const menus = studioPack.stageNodes.filter((n) => n.type === "menu");
     expect(menus).toHaveLength(2);
     for (const menu of menus) {
       expect(menu.image).toBeTruthy();
-      expect(menu.homeTransition).toBeNull();
+      expect(menu.homeTransition).toEqual({
+        actionNode: backToCoverAction?.id,
+        optionIndex: 0,
+      });
     }
 
     const stories = studioPack.stageNodes.filter((n) => n.type === "story");

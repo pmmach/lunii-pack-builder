@@ -83,21 +83,23 @@ story --ok/home--> actionBackToCover --options:[cover]--> cover
 
 Validé manuellement sur appareil Lunii (pack Radio France, 1 histoire) après correctif `onEnd: "back"` (06/09/2026).
 
-**Plusieurs histoires** — le noeud `cover` porte l'image/intro du **pack**, et chaque histoire devient un noeud `menu` intermédiaire menant à son `story` ; en fin de lecture, retour au menu racine :
+**Plusieurs histoires** — le noeud `cover` porte l'image/intro du **pack**, et chaque histoire devient un noeud `menu` intermédiaire menant à son `story` ; en fin de lecture, retour au menu de l'histoire ; Maison remonte d'un cran :
 
 ```
 cover --ok--> actionRacine --options:[menu1, menu2, ...]
   menu1 --ok--> action1 --options:[story1]--> story1 --ok/home--> actionRacine (optionIndex 0)
   menu2 --ok--> action2 --options:[story2]--> story2 --ok/home--> actionRacine (optionIndex 1)
+  menu* --home--> actionBackToCover --options:[cover]--> cover
   ...
 ```
 
-`homeTransition` / `okTransition` en fin de lecture (équivalent `onEnd: "back"` de lunii-admin-builder) :
+`homeTransition` / `okTransition` (équivalent `onEnd: "back"` de lunii-admin-builder) :
 
-- Sur `cover` et `menu` : `homeTransition` reste `null` (Maison → bibliothèque de packs)
+- Sur `cover` : `homeTransition` reste `null` (Maison → bibliothèque de packs)
+- Sur chaque `menu` : **`homeTransition` → actionBackToCover** (Maison → cover du pack)
 - Sur chaque `story` : **`okTransition` = `homeTransition`**, pour que la fin d'autoplay ait une destination (sinon certains firmwares affichent « erreur carte SD »)
   - **1 histoire** : les deux pointent vers une action dont l'unique option est le cover du pack (2 action nodes au total)
-  - **Multi** : les deux pointent vers `{ actionNode: <action racine>, optionIndex: <position de l'histoire> }` (retour au menu du pack)
+  - **Multi** : les deux pointent vers `{ actionNode: <action racine>, optionIndex: <position de l'histoire> }` (retour au menu de l'histoire) ; + 1 action `backToCover` partagée par les menus
 
 Note : un pack de référence produit par Lunii Admin Builder avec `onEnd: "stop"` peut avoir `okTransition`/`homeTransition` à `null` sur le story ; notre générateur **choisit volontairement** le comportement `back` pour la robustesse firmware.
 
