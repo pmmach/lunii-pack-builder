@@ -28,7 +28,13 @@ FROM node:20-bookworm-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
-RUN groupadd --system app && useradd --system --gid app app
+# Requis pour Next standalone en conteneur (sinon écoute seulement localhost)
+ENV HOSTNAME=0.0.0.0
+# Coolify exécute les healthchecks HTTP via curl/wget dans l'image
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends curl \
+  && rm -rf /var/lib/apt/lists/* \
+  && groupadd --system app && useradd --system --gid app app
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
@@ -36,14 +42,16 @@ RUN mkdir -p /app/workspace && chown -R app:app /app
 USER app
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD node -e "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD curl --fail --silent --show-error http://localhost:3000/api/health || exit 1
 CMD ["node", "server.js"]
 ```
 
 Points d'attention :
 
 - `output: "standalone"` (déjà configuré en spec 00) est indispensable pour que `.next/standalone/server.js` existe
-- `@ffmpeg-installer/ffmpeg` et `sharp` embarquent leurs binaires natifs dans `node_modules` lors du `npm ci`/`npm run build` : comme l'image finale est aussi Debian glibc (cohérente avec l'étape de build), aucune installation `apt` supplémentaire n'est nécessaire
+- `HOSTNAME=0.0.0.0` est indispensable : sans ça, Next standalone n'est joignable ni par Traefik ni par le healthcheck Coolify
+- `curl` est installé dans l'image finale car Coolify exige curl/wget pour les healthchecks HTTP sur les déploiements Dockerfile
+- `@ffmpeg-installer/ffmpeg` et `sharp` embarquent leurs binaires natifs dans `node_modules` lors du `npm ci`/`npm run build` : comme l'image finale est aussi Debian glibc (cohérente avec l'étape de build), aucune installation ffmpeg via `apt` n'est nécessaire
 - Le `HEALTHCHECK` interne est optionnel si Coolify fait déjà son propre health check HTTP (voir plus bas) — le garder ne coûte rien et aide au debug via `docker inspect`
 
 ## `.dockerignore`
