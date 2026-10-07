@@ -120,6 +120,9 @@ describe("usage", () => {
         { code: "UNKNOWN", count: 1 },
       ])
     );
+    expect(report.semester.exports).toBe(2);
+    expect(report.history[0]?.day).toBe("2026-04-07");
+    expect(report.history.at(-1)?.day).toBe("2026-10-07");
     expect(report.days).toHaveLength(30);
     expect(report.days[0]?.day).toBe(parisDay(NOW));
     expect(report.today.visitors).toBe(1);
@@ -139,16 +142,16 @@ describe("usage", () => {
     expect(raw.trim().split("\n")).toHaveLength(1);
   });
 
-  it("oublie les événements de plus de 90 jours", async () => {
+  it("oublie les événements de plus de 6 mois", async () => {
     await useTempDir();
-    at("2026-07-08T12:00:00.000Z");
+    at("2026-04-06T12:00:00.000Z");
     recordUsage({
       type: "resolve",
       visitorIp: "203.0.113.10",
       ok: true,
       sourceKind: "rss",
     });
-    at("2026-07-09T12:00:00.000Z");
+    at("2026-04-07T12:00:00.000Z");
     recordUsage({
       type: "resolve",
       visitorIp: "203.0.113.11",
@@ -158,9 +161,10 @@ describe("usage", () => {
     at("2026-10-07T12:00:00.000Z");
     const report = await loadUsageReport();
     expect(report.last30.resolvesOk).toBe(0);
+    expect(report.semester.resolvesOk).toBe(1);
     const raw = await readFile(path.join(dir!, "usage.jsonl"), "utf8");
-    expect(raw).not.toContain("2026-07-08");
-    expect(raw).toContain("2026-07-09");
+    expect(raw).not.toContain("2026-04-06");
+    expect(raw).toContain("2026-04-07");
   });
 
   it("ignore une ligne illisible", async () => {

@@ -122,8 +122,8 @@ Historique léger pour la page `/stats` (protégée par `STATS_TOKEN`, 404 si la
 
 - Une ligne JSON par action dans `data/usage.jsonl` : date, type (`visit`, `resolve`, `export`, `download`, `tts`, `rate_limited`), succès, type de source, nombre d'histoires, code d'erreur, empreinte visiteur
 - L'empreinte est un HMAC de l'IP (sel dans `data/visitor-salt`). L'IP, l'URL et les titres ne sont pas écrits
-- Rétention 90 jours (fuseau Europe/Paris), purge à la lecture de `/stats` et périodiquement à l'écriture
-- La page agrège aujourd'hui, 7 jours et 30 jours : visiteurs, fréquence, résolutions, packs générés, téléchargements, histoires, aperçus TTS, rate limits
+- Rétention 6 mois (fuseau Europe/Paris), purge à la lecture de `/stats` et périodiquement à l'écriture
+- La page agrège aujourd'hui, 30 jours et 6 mois : visiteurs, fréquence, résolutions, packs générés, téléchargements, histoires, aperçus TTS, rate limits. Quatre courbes couvrent les 6 mois : visiteurs, résolutions réussies, packs générés, packs téléchargés
 - Volume Coolify **persistant** monté sur `/app/data`. Sans ce volume, l'historique part à chaque redéploiement. Le dossier doit être accessible en écriture par l'utilisateur `app` du conteneur
 
 ## Runbook Coolify (à exécuter manuellement par l'utilisateur)
@@ -144,5 +144,5 @@ Historique léger pour la page `/stats` (protégée par `STATS_TOKEN`, 404 si la
 - [ ] `docker run -p 3000:3000 lunii-pack-builder` répond sur `/api/health`
 - [ ] Un trim ffmpeg fonctionne à l'intérieur du conteneur (test manuel : lancer le parcours complet contre le conteneur local avant de déployer sur le VPS)
 - [ ] `checkRateLimit` testé unitairement (`rate-limit.test.ts`) : autorise sous la limite, bloque au-delà, se réinitialise après la fenêtre de temps (mocker `Date.now`)
-- [ ] `usage.test.ts` : agrège l'historique, déduplique les visites, purge au-delà de 90 jours, n'écrit pas l'IP
+- [ ] `usage.test.ts` : agrège l'historique, déduplique les visites, purge au-delà de 6 mois, n'écrit pas l'IP
 - [ ] Déploiement Coolify réel validé manuellement par l'utilisateur sur son VPS (hors périmètre de l'agent)

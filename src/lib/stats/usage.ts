@@ -6,7 +6,7 @@ import {
   type SourceKind,
 } from "@/lib/stats/source-kind";
 
-export const USAGE_RETENTION_DAYS = 90;
+export const USAGE_RETENTION_MONTHS = 6;
 export const USAGE_WINDOW_DAYS = 30;
 
 const VISIT_CAP_PER_DAY = 10_000;
@@ -67,9 +67,14 @@ export interface UsageReport {
   today: UsageTotals;
   last7: UsageTotals;
   last30: UsageTotals;
-  /** Visiteurs des 30 derniers jours, selon le nombre de jours distincts où ils apparaissent. */
+  /** Totaux sur les 6 derniers mois. */
+  semester: UsageTotals;
+  /** Visiteurs des 6 derniers mois, selon le nombre de jours distincts où ils apparaissent. */
   frequency: { once: number; few: number; regular: number };
+  /** 30 derniers jours, du plus récent au plus ancien. */
   days: UsageDay[];
+  /** 6 derniers mois, du plus ancien au plus récent. Sert aux courbes. */
+  history: UsageDay[];
   sourceKinds: Array<{ kind: SourceKind; ok: number; fail: number }>;
   errorCodes: Array<{ code: string; count: number }>;
   rateLimitedByBucket: Record<UsageBucket, number>;
@@ -92,10 +97,44 @@ export function addCalendarDays(day: string, delta: number): string {
   const month = parts[1] ?? 1;
   const date = parts[2] ?? 1;
   const utc = new Date(Date.UTC(year, month - 1, date + delta));
+  return formatUtcDay(utc);
+}
+
+export function addCalendarMonths(day: string, delta: number): string {
+  const parts = day.split("-").map(Number);
+  const year = parts[0] ?? 1970;
+  const month = (parts[1] ?? 1) - 1;
+  const date = parts[2] ?? 1;
+  const monthStart = new Date(Date.UTC(year, month + delta, 1));
+  const lastDay = new Date(
+    Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 1, 0)
+  ).getUTCDate();
+  return formatUtcDay(
+    new Date(
+      Date.UTC(
+        monthStart.getUTCFullYear(),
+        monthStart.getUTCMonth(),
+        Math.min(date, lastDay)
+      )
+    )
+  );
+}
+
+function formatUtcDay(utc: Date): string {
   const yyyy = utc.getUTCFullYear();
   const mm = String(utc.getUTCMonth() + 1).padStart(2, "0");
   const dd = String(utc.getUTCDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
+}
+
+function daysFrom(start: string, end: string): string[] {
+  const days: string[] = [];
+  let cursor = start;
+  while (cursor <= end && days.length < 400) {
+    days.push(cursor);
+    cursor = addCalendarDays(cursor, 1);
+  }
+  return days;
 }
 
 export function fingerprintVisitor(ip: string, salt: string): string {
@@ -250,7 +289,7 @@ async function readAndPrune(now: Date): Promise<UsageEvent[]> {
     throw error;
   }
 
-  const minDay = addCalendarDays(parisDay(now), -USAGE_RETENTION_DAYS);
+  const minDay = addCalendarMonths(parisDay(now), -USAGE_RETENTION_MONTHS);
   const kept: UsageEvent[] = [];
   let dropped = 0;
   for (const line of raw.split("\n")) {
@@ -390,13 +429,27 @@ function totalsForDays(keys: string[], map: Map<string, DayBucket>): UsageTotals
   return totals;
 }
 
+function dayPoint(day: string, map: Map<string, DayBucket>): UsageDay {
+  const bucket = map.get(day);
+  return {
+    day,
+    ...(bucket
+      ? { ...bucket.totals, visitors: bucket.visitors.size }
+      : emptyTotals()),
+  };
+}
+
 export function aggregateUsage(events: UsageEvent[], now: Date): UsageReport {
   const today = parisDay(now);
+  const historyKeys = daysFrom(
+    addCalendarMonths(today, -USAGE_RETENTION_MONTHS),
+    today
+  );
   const last30Keys = Array.from({ length: USAGE_WINDOW_DAYS }, (_, index) =>
     addCalendarDays(today, index - (USAGE_WINDOW_DAYS - 1))
   );
   const last7Keys = last30Keys.slice(-7);
-  const inLast30 = new Set(last30Keys);
+  const inHistory = new Set(historyKeys);
   const byDay = new Map<string, DayBucket>();
   const kindCounts = new Map<SourceKind, { ok: number; fail: number }>();
   const errorCounts = new Map<string, number>();
@@ -410,7 +463,7 @@ export function aggregateUsage(events: UsageEvent[], now: Date): UsageReport {
   for (const event of events) {
     const day = parisDay(new Date(event.t));
     applyEvent(ensureDay(byDay, day), event);
-    if (!inLast30.has(day)) continue;
+    if (!inHistory.has(day)) continue;
 
     let seen = daysSeen.get(event.visitor);
     if (!seen) {
@@ -440,22 +493,14 @@ export function aggregateUsage(events: UsageEvent[], now: Date): UsageReport {
     else frequency.once += 1;
   }
 
-  const days: UsageDay[] = [...last30Keys].reverse().map((day) => {
-    const bucket = byDay.get(day);
-    return {
-      day,
-      ...(bucket
-        ? { ...bucket.totals, visitors: bucket.visitors.size }
-        : emptyTotals()),
-    };
-  });
-
   return {
     today: totalsForDays([today], byDay),
     last7: totalsForDays(last7Keys, byDay),
     last30: totalsForDays(last30Keys, byDay),
+    semester: totalsForDays(historyKeys, byDay),
     frequency,
-    days,
+    days: [...last30Keys].reverse().map((day) => dayPoint(day, byDay)),
+    history: historyKeys.map((day) => dayPoint(day, byDay)),
     sourceKinds: [...kindCounts.entries()]
       .map(([kind, counts]) => ({ kind, ...counts }))
       .sort((a, b) => b.ok + b.fail - (a.ok + a.fail)),
