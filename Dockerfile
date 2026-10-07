@@ -25,6 +25,9 @@ RUN apt-get update \
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
+# Binaires ffmpeg/ffprobe (optionalDeps) souvent absents du tracer standalone
+COPY --from=builder /app/node_modules/@ffmpeg-installer ./node_modules/@ffmpeg-installer
+COPY --from=builder /app/node_modules/@ffprobe-installer ./node_modules/@ffprobe-installer
 RUN mkdir -p /app/workspace && chown -R app:app /app
 USER app
 EXPOSE 3000

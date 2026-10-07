@@ -38,6 +38,9 @@ RUN apt-get update \
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
+# Binaires ffmpeg/ffprobe (optionalDeps) souvent absents du tracer standalone
+COPY --from=builder /app/node_modules/@ffmpeg-installer ./node_modules/@ffmpeg-installer
+COPY --from=builder /app/node_modules/@ffprobe-installer ./node_modules/@ffprobe-installer
 RUN mkdir -p /app/workspace && chown -R app:app /app
 USER app
 EXPOSE 3000
@@ -51,7 +54,8 @@ Points d'attention :
 - `output: "standalone"` (déjà configuré en spec 00) est indispensable pour que `.next/standalone/server.js` existe
 - `HOSTNAME=0.0.0.0` est indispensable : sans ça, Next standalone n'est joignable ni par Traefik ni par le healthcheck Coolify
 - `curl` est installé dans l'image finale car Coolify exige curl/wget pour les healthchecks HTTP sur les déploiements Dockerfile
-- `@ffmpeg-installer/ffmpeg` et `sharp` embarquent leurs binaires natifs dans `node_modules` lors du `npm ci`/`npm run build` : comme l'image finale est aussi Debian glibc (cohérente avec l'étape de build), aucune installation ffmpeg via `apt` n'est nécessaire
+- `@ffmpeg-installer/ffmpeg`, `@ffprobe-installer/ffprobe` et `sharp` embarquent leurs binaires natifs dans `node_modules` lors du `npm ci`/`npm run build` : comme l'image finale est aussi Debian glibc (cohérente avec l'étape de build), aucune installation ffmpeg via `apt` n'est nécessaire
+- Les binaires plateforme (`@ffmpeg-installer/linux-x64`, `@ffprobe-installer/linux-x64`, …) sont des **optionalDependencies** résolues dynamiquement : le tracer `standalone` de Next ne les copie pas toujours. D'où le `COPY` explicite dans le stage `runner` (et `outputFileTracingIncludes` dans `next.config.ts`) — sans ça → `Cannot find module '@ffprobe-installer/linux-x64/ffprobe'` au trim
 - Le `HEALTHCHECK` interne est optionnel si Coolify fait déjà son propre health check HTTP (voir plus bas) — le garder ne coûte rien et aide au debug via `docker inspect`
 
 ## `.dockerignore`
