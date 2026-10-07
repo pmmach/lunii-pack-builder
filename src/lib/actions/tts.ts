@@ -1,6 +1,7 @@
 "use server";
 
 import path from "node:path";
+import { recordUsage } from "@/lib/stats/usage";
 import { getClientIp } from "@/lib/shared/client-ip";
 import { env } from "@/lib/shared/env";
 import { checkRateLimit } from "@/lib/shared/rate-limit";
@@ -22,14 +23,33 @@ export async function synthesizeTitleAction(
 ): Promise<Result<{ url: string; cacheHit: boolean }>> {
   const ip = await getClientIp();
   const limited = checkRateLimit(ip, "tts");
-  if (!limited.ok) return limited;
+  if (!limited.ok) {
+    recordUsage({ type: "rate_limited", visitorIp: ip, bucket: "tts" });
+    return limited;
+  }
 
   if (!sessionId || sessionId.includes("..")) {
+    recordUsage({
+      type: "tts",
+      visitorIp: ip,
+      ok: false,
+      errorCode: "INVALID_SESSION",
+    });
     return err("Session invalide", "INVALID_SESSION");
   }
 
   const result = await synthesizeTitle({ sessionId, text });
-  if (!result.ok) return result;
+  if (!result.ok) {
+    recordUsage({
+      type: "tts",
+      visitorIp: ip,
+      ok: false,
+      errorCode: result.code ?? "UNKNOWN",
+    });
+    return result;
+  }
+
+  recordUsage({ type: "tts", visitorIp: ip, ok: true });
 
   const hash = path.basename(result.data.filePath, ".mp3");
   return ok({

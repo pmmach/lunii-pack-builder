@@ -1,6 +1,8 @@
 import { createReadStream } from "node:fs";
-import { access, readFile, rm } from "node:fs/promises";
+import { access, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { recordUsage } from "@/lib/stats/usage";
+import { getClientIp } from "@/lib/shared/client-ip";
 import { env } from "@/lib/shared/env";
 
 export async function GET(
@@ -33,10 +35,26 @@ export async function GET(
   try {
     const meta = JSON.parse(await readFile(metaPath, "utf-8")) as {
       packSlug?: string;
+      stories?: number;
+      downloadCounted?: boolean;
     };
     if (meta.packSlug) packSlug = meta.packSlug;
+    if (!meta.downloadCounted) {
+      const ip = await getClientIp();
+      await writeFile(
+        metaPath,
+        JSON.stringify({ ...meta, downloadCounted: true }),
+        "utf-8"
+      );
+      recordUsage({
+        type: "download",
+        visitorIp: ip,
+        ok: true,
+        stories: typeof meta.stories === "number" ? meta.stories : undefined,
+      });
+    }
   } catch {
-    // ignore
+    // le téléchargement reste prioritaire
   }
 
   const stream = createReadStream(zipPath);

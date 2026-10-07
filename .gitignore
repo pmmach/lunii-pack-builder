@@ -15,6 +15,8 @@ dist/
 
 # Workspace de travail de l'app (audio/images téléchargés, packs générés)
 /workspace/
+# Historique d'usage (usage.jsonl, sel visiteur)
+/data/
 tmp/
 *.log
 

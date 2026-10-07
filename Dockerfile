@@ -28,7 +28,7 @@ COPY --from=builder /app/.next/static ./.next/static
 # Binaires ffmpeg/ffprobe (optionalDeps) souvent absents du tracer standalone
 COPY --from=builder /app/node_modules/@ffmpeg-installer ./node_modules/@ffmpeg-installer
 COPY --from=builder /app/node_modules/@ffprobe-installer ./node_modules/@ffprobe-installer
-RUN mkdir -p /app/workspace && chown -R app:app /app
+RUN mkdir -p /app/workspace /app/data && chown -R app:app /app
 USER app
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \

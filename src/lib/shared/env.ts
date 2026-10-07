@@ -24,6 +24,8 @@ const envSchema = z.object({
   AZURE_SPEECH_KEY: z.string().optional(),
   AZURE_SPEECH_REGION: z.string().optional(),
   GOOGLE_TTS_API_KEY: z.string().optional(),
+  /** Mot de passe de la page /stats. Vide = page invisible. */
+  STATS_TOKEN: z.string().optional(),
 });
 
 export const env = envSchema.parse(process.env);

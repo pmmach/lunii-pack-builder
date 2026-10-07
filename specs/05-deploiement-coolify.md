@@ -88,8 +88,9 @@ workspace
 | `TTS_MAX_CHARS` | `200` | Longueur max du texte synthétisé |
 | `AZURE_SPEECH_KEY` / `AZURE_SPEECH_REGION` | (vide) | Requis si `TTS_PROVIDER=azure` |
 | `GOOGLE_TTS_API_KEY` | (vide) | Requis si `TTS_PROVIDER=google` |
+| `STATS_TOKEN` | (vide) | Mot de passe de la page `/stats`. Vide = page en 404 |
 
-Toutes ont des valeurs par défaut sûres dans `src/lib/shared/env.ts` (spec 00) — aucune n'est strictement obligatoire au démarrage. Avec le défaut `edge`, le mode intro « Synthétique » est disponible sans configuration. Azure/Google sans clés : option désactivée dans l'UI (spec 07).
+Toutes ont des valeurs par défaut sûres dans `src/lib/shared/env.ts` (spec 00) — aucune n'est strictement obligatoire au démarrage. Avec le défaut `edge`, le mode intro « Synthétique » est disponible sans configuration. Azure/Google sans clés : option désactivée dans l'UI (spec 07). `STATS_TOKEN` vide laisse la page de statistiques invisible.
 
 ## Garde-fous anti-abus (obligatoires pour un déploiement public sans authentification)
 
@@ -115,6 +116,16 @@ export function startWorkspaceCleanupScheduler(): void;
 - Toutes les 5 minutes : parcourt `workspace/`, supprime tout dossier `<sessionId>` dont le fichier le plus récent date de plus de `env.WORKSPACE_TTL_MINUTES` minutes
 - Journalise (console) le nombre de sessions nettoyées, sans détail sensible
 
+## Statistiques d'usage
+
+Historique léger pour la page `/stats` (protégée par `STATS_TOKEN`, 404 si la variable est vide). Pas de cookie visiteur, pas de service externe.
+
+- Une ligne JSON par action dans `data/usage.jsonl` : date, type (`visit`, `resolve`, `export`, `download`, `tts`, `rate_limited`), succès, type de source, nombre d'histoires, code d'erreur, empreinte visiteur
+- L'empreinte est un HMAC de l'IP (sel dans `data/visitor-salt`). L'IP, l'URL et les titres ne sont pas écrits
+- Rétention 90 jours (fuseau Europe/Paris), purge à la lecture de `/stats` et périodiquement à l'écriture
+- La page agrège aujourd'hui, 7 jours et 30 jours : visiteurs, fréquence, résolutions, packs générés, téléchargements, histoires, aperçus TTS, rate limits
+- Volume Coolify **persistant** monté sur `/app/data`. Sans ce volume, l'historique part à chaque redéploiement. Le dossier doit être accessible en écriture par l'utilisateur `app` du conteneur
+
 ## Runbook Coolify (à exécuter manuellement par l'utilisateur)
 
 1. Dans Coolify : **New Resource → Application → Public/Private Git Repository**, pointer sur ce repo et la branche à déployer
@@ -122,9 +133,10 @@ export function startWorkspaceCleanupScheduler(): void;
 3. Port exposé : `3000`
 4. Health check : chemin `/api/health`, port `3000`
 5. Variables d'environnement : renseigner celles du tableau ci-dessus si on veut dévier des valeurs par défaut
-6. Pas de volume persistant à attacher pour le MVP (le `workspace/` est éphémère et purgé automatiquement — voir plus haut) ; l'ajouter plus tard uniquement si un besoin de debug post-mortem apparaît
+6. Pas de volume persistant pour `workspace/` (éphémère, purgé automatiquement). Pour garder l'historique de `/stats`, ajouter un volume persistant monté sur `/app/data`
 7. Domaine : attacher un sous-domaine dans Coolify, laisser Traefik gérer le certificat Let's Encrypt automatiquement
 8. Déployer, vérifier `https://<domaine>/api/health` → `{"status":"ok"}`, puis tester un cycle complet (résoudre une source → générer un pack) directement sur le déploiement
+9. Si `STATS_TOKEN` est défini : ouvrir `https://<domaine>/stats`, saisir le mot de passe, vérifier qu'une visite apparaît après un chargement de l'accueil
 
 ## Tests / critères d'acceptation
 
@@ -132,4 +144,5 @@ export function startWorkspaceCleanupScheduler(): void;
 - [ ] `docker run -p 3000:3000 lunii-pack-builder` répond sur `/api/health`
 - [ ] Un trim ffmpeg fonctionne à l'intérieur du conteneur (test manuel : lancer le parcours complet contre le conteneur local avant de déployer sur le VPS)
 - [ ] `checkRateLimit` testé unitairement (`rate-limit.test.ts`) : autorise sous la limite, bloque au-delà, se réinitialise après la fenêtre de temps (mocker `Date.now`)
+- [ ] `usage.test.ts` : agrège l'historique, déduplique les visites, purge au-delà de 90 jours, n'écrit pas l'IP
 - [ ] Déploiement Coolify réel validé manuellement par l'utilisateur sur son VPS (hors périmètre de l'agent)

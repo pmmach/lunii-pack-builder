@@ -3,7 +3,7 @@
 import { Link2, Scissors, Download, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { recordVisitAction } from "@/lib/actions/stats";
 import { resolveSourceAction } from "@/lib/actions/resolve-source";
 import { DEFAULT_TITLE_CLIP_SECONDS } from "@/lib/pack/constants";
 import { saveSession } from "@/lib/session/client-store";
@@ -37,6 +38,10 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
 
   const showInlineError = touched && url.length > 0 && !isValidHttpUrl(url);
+
+  useEffect(() => {
+    void recordVisitAction();
+  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
