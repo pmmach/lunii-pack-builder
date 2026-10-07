@@ -3,6 +3,7 @@ import {
   _resetStatsAccessForTests,
   allowStatsAttempt,
   passwordMatches,
+  readStatsToken,
   setStatsAccessNowForTests,
   statsCookieMatches,
   statsCookieValue,
@@ -17,6 +18,12 @@ describe("accès statistiques", () => {
     expect(passwordMatches("secret", "secret")).toBe(true);
     expect(passwordMatches("nope", "secret")).toBe(false);
     expect(passwordMatches("", "secret")).toBe(false);
+  });
+
+  it("ignore les espaces autour du token", () => {
+    expect(readStatsToken("  secret  ")).toBe("secret");
+    expect(readStatsToken("   ")).toBeUndefined();
+    expect(readStatsToken(undefined)).toBeUndefined();
   });
 
   it("reconnaît le cookie dérivé du token", () => {

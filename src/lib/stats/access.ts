@@ -2,11 +2,19 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 export const STATS_COOKIE = "stats_auth";
 
-export function statsCookieOptions(maxAge = 60 * 60 * 24 * 30) {
+export function readStatsToken(raw: string | undefined): string | undefined {
+  const trimmed = raw?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+export function statsCookieOptions(
+  maxAge = 60 * 60 * 24 * 30,
+  secure = process.env.NODE_ENV === "production"
+) {
   return {
     httpOnly: true,
     sameSite: "lax" as const,
-    secure: process.env.NODE_ENV === "production",
+    secure,
     path: "/",
     maxAge,
   };
