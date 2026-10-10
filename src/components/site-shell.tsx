@@ -25,15 +25,15 @@ export function SiteShell({
 
       <main className="mx-auto flex max-w-3xl flex-col gap-10 px-4 pb-16 pt-6">
         {children}
-        <footer className="text-muted-foreground space-y-3 text-center text-xs">
+        <footer className="text-muted-foreground space-y-4 text-center text-xs">
           <nav
             aria-label="Guides"
-            className="flex flex-wrap justify-center gap-x-4 gap-y-2"
+            className="flex flex-wrap justify-center gap-2"
           >
             {currentPath ? (
               <Link
                 href="/#analyser"
-                className="text-primary font-medium underline underline-offset-2 hover:decoration-primary"
+                className="border-primary/25 bg-primary/5 text-primary hover:border-primary/40 hover:bg-primary/10 inline-flex min-h-9 items-center rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors"
               >
                 Créer un pack
               </Link>
@@ -42,7 +42,7 @@ export function SiteShell({
               <Link
                 key={page.path}
                 href={page.path}
-                className="text-primary underline-offset-2 hover:underline"
+                className="border-border/80 bg-background/70 text-primary hover:border-primary/30 hover:bg-primary/5 inline-flex min-h-9 items-center rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors"
               >
                 {page.title}
               </Link>
