@@ -17,7 +17,23 @@ export async function generateMetadata() {
 
 export default function ImporterGuidePage() {
   return (
-    <GuideArticle path={page.path} title={page.title} lede={page.description}>
+    <GuideArticle
+      path={page.path}
+      title={page.title}
+      lede={
+        <>
+          Après le téléchargement du .zip : l&apos;importer dans{" "}
+          <ExternalGuideLink href={LUNII_ADMIN_WEB_URL} prominent>
+            Lunii Admin Web
+          </ExternalGuideLink>{" "}
+          ou{" "}
+          <ExternalGuideLink href={LUNII_ADMIN_BUILDER_URL} prominent>
+            Lunii Admin Builder
+          </ExternalGuideLink>
+          , puis l&apos;installer sur la Fabrique à histoires.
+        </>
+      }
+    >
       <GuideSection title="Télécharger le zip" icon={Download}>
         <p>
           Quand les histoires sont prêtes, le bouton de téléchargement
@@ -30,11 +46,11 @@ export default function ImporterGuidePage() {
       <GuideSection title="Importer le fichier" icon={FolderInput}>
         <p>
           Ouvre{" "}
-          <ExternalGuideLink href={LUNII_ADMIN_BUILDER_URL}>
+          <ExternalGuideLink href={LUNII_ADMIN_BUILDER_URL} prominent>
             Lunii Admin Builder
           </ExternalGuideLink>{" "}
           ou{" "}
-          <ExternalGuideLink href={LUNII_ADMIN_WEB_URL}>
+          <ExternalGuideLink href={LUNII_ADMIN_WEB_URL} prominent>
             Lunii Admin Web
           </ExternalGuideLink>{" "}
           et importe ce zip. Utilise l&apos;import du fichier, pas le bouton
@@ -45,7 +61,7 @@ export default function ImporterGuidePage() {
         <p>
           Branche la Fabrique à histoires en USB et lance l&apos;installation
           depuis{" "}
-          <ExternalGuideLink href={LUNII_ADMIN_WEB_URL}>
+          <ExternalGuideLink href={LUNII_ADMIN_WEB_URL} prominent>
             Lunii Admin Web
           </ExternalGuideLink>
           . Cette étape se fait dans le navigateur, avec l&apos;appareil

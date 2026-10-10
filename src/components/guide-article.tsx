@@ -9,7 +9,7 @@ export function GuideArticle({
 }: {
   path: string;
   title: string;
-  lede: string;
+  lede: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -57,14 +57,21 @@ export function GuideSection({
 export function ExternalGuideLink({
   href,
   children,
+  prominent = false,
 }: {
   href: string;
   children: React.ReactNode;
+  /** Style plus marqué (page d'import, etc.). */
+  prominent?: boolean;
 }) {
   return (
     <a
       href={href}
-      className="text-primary underline-offset-2 hover:underline"
+      className={
+        prominent
+          ? "text-primary font-semibold underline decoration-primary/50 underline-offset-4 hover:decoration-primary"
+          : "text-primary font-medium underline underline-offset-2 hover:decoration-primary"
+      }
       target="_blank"
       rel="noreferrer"
     >
