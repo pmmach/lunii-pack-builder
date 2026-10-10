@@ -26,6 +26,8 @@ const envSchema = z.object({
   GOOGLE_TTS_API_KEY: z.string().optional(),
   /** Mot de passe de la page /stats. Vide = page invisible. */
   STATS_TOKEN: z.string().optional(),
+  /** Origine publique (canonical, sitemap). Vide = hôte de la requête. */
+  SITE_URL: z.string().optional(),
 });
 
 export const env = envSchema.parse(process.env);

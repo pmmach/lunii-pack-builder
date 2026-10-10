@@ -89,8 +89,9 @@ workspace
 | `AZURE_SPEECH_KEY` / `AZURE_SPEECH_REGION` | (vide) | Requis si `TTS_PROVIDER=azure` |
 | `GOOGLE_TTS_API_KEY` | (vide) | Requis si `TTS_PROVIDER=google` |
 | `STATS_TOKEN` | (vide) | Mot de passe de la page `/stats`. Vide = page en 404 |
+| `SITE_URL` | (hôte de la requête) | Origine publique pour le canonical, Open Graph et le sitemap. Ex. `https://packs.example.com` |
 
-Toutes ont des valeurs par défaut sûres dans `src/lib/shared/env.ts` (spec 00) — aucune n'est strictement obligatoire au démarrage. Avec le défaut `edge`, le mode intro « Synthétique » est disponible sans configuration. Azure/Google sans clés : option désactivée dans l'UI (spec 07). `STATS_TOKEN` vide laisse la page de statistiques invisible.
+Toutes ont des valeurs par défaut sûres dans `src/lib/shared/env.ts` (spec 00) — aucune n'est strictement obligatoire au démarrage. Avec le défaut `edge`, le mode intro « Synthétique » est disponible sans configuration. Azure/Google sans clés : option désactivée dans l'UI (spec 07). `STATS_TOKEN` vide laisse la page de statistiques invisible. `SITE_URL` vide : l'origine canonique suit l'hôte de la requête.
 
 ## Garde-fous anti-abus (obligatoires pour un déploiement public sans authentification)
 

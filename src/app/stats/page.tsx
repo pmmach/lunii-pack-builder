@@ -12,7 +12,7 @@ import { notFound } from "next/navigation";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Statistiques — Lunii Pack Builder",
+  title: { absolute: "Statistiques — Lunii Pack Builder" },
   robots: { index: false, follow: false },
 };
 

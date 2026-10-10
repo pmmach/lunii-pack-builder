@@ -42,7 +42,10 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-sans", weight: ["400
 
 ## Étape 1 — Accueil (`src/app/page.tsx`)
 
-- Titre + une phrase d'explication ("Colle l'URL d'un podcast, on en fait un pack Lunii")
+- En-tête de marque « Lunii Pack Builder » (lien vers `/`)
+- H1 « Transformer un podcast en pack Lunii », une phrase d'explication, puis un court paragraphe (usage personnel, zip pour Lunii Admin Web)
+- Liens de pied de page vers les guides `/guides/importer`, `/guides/un-ou-plusieurs-episodes`, `/guides/sources`
+- Métadonnées, `sitemap.xml` et `robots.txt` : accueil et guides indexables. `/pack`, `/stats` et `/api` exclus. `SITE_URL` (optionnel) fixe l'origine canonique ; sinon l'hôte de la requête
 - `Input` (type url) + `Button` "Analyser" (variant `default`, couleur accent)
 - Validation inline : sur `onBlur`, vérifier que la valeur ressemble à une URL http(s) valide (regex/`URL` constructor), afficher un message d'erreur sous le champ si invalide (recommandation UX "Inline Validation")
 - Au submit : état de chargement sur le bouton (spinner + texte "Analyse en cours…"), appel à `resolveSourceAction`
