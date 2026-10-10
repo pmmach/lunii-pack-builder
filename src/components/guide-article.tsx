@@ -1,5 +1,31 @@
-import type { LucideIcon } from "lucide-react";
+import { ArrowRight, type LucideIcon } from "lucide-react";
+import Link from "next/link";
 import { SiteShell } from "@/components/site-shell";
+
+function CreatePackCta({ compact = false }: { compact?: boolean }) {
+  return (
+    <div
+      className={
+        compact
+          ? "pt-1"
+          : "rounded-2xl border border-primary/20 bg-primary/5 px-4 py-5 sm:px-5"
+      }
+    >
+      {!compact ? (
+        <p className="text-foreground mb-3 text-sm font-medium sm:text-base">
+          Prêt à transformer un podcast en pack Lunii&nbsp;?
+        </p>
+      ) : null}
+      <Link
+        href="/#analyser"
+        className="bg-accent text-accent-foreground hover:bg-accent/90 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold"
+      >
+        Créer un pack
+        <ArrowRight className="size-4" aria-hidden />
+      </Link>
+    </div>
+  );
+}
 
 export function GuideArticle({
   path,
@@ -15,13 +41,15 @@ export function GuideArticle({
   return (
     <SiteShell currentPath={path}>
       <article className="space-y-8">
-        <header className="space-y-3">
+        <header className="space-y-4">
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
             {title}
           </h1>
           <p className="text-muted-foreground max-w-xl text-balance">{lede}</p>
+          <CreatePackCta compact />
         </header>
         <div className="space-y-6">{children}</div>
+        <CreatePackCta />
       </article>
     </SiteShell>
   );

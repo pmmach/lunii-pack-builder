@@ -32,8 +32,8 @@ export function SiteShell({
           >
             {currentPath ? (
               <Link
-                href="/"
-                className="text-primary underline-offset-2 hover:underline"
+                href="/#analyser"
+                className="text-primary font-medium underline underline-offset-2 hover:decoration-primary"
               >
                 Créer un pack
               </Link>
