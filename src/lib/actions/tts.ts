@@ -6,6 +6,7 @@ import { getClientIp } from "@/lib/shared/client-ip";
 import { env } from "@/lib/shared/env";
 import { checkRateLimit } from "@/lib/shared/rate-limit";
 import { err, ok, type Result } from "@/lib/shared/result";
+import { isValidSessionId } from "@/lib/shared/session-id";
 import { isTtsConfigured, synthesizeTitle } from "@/lib/tts";
 
 export async function getTtsStatusAction(): Promise<
@@ -28,7 +29,7 @@ export async function synthesizeTitleAction(
     return limited;
   }
 
-  if (!sessionId || sessionId.includes("..")) {
+  if (!isValidSessionId(sessionId)) {
     recordUsage({
       type: "tts",
       visitorIp: ip,

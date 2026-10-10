@@ -110,6 +110,65 @@ export async function assertSafeUrl(rawUrl: string): Promise<Result<URL>> {
 
 export const FETCH_TIMEOUT_MS = 10_000;
 export const MAX_RESPONSE_BYTES = 5 * 1024 * 1024; // 5 Mo
+export const MAX_SAFE_REDIRECTS = 5;
+
+const DEFAULT_USER_AGENT =
+  "LuniiPackBuilder/0.1 (+https://github.com/pmmach/lunii-pack-builder)";
+
+/**
+ * Fetch avec redirections manuelles : chaque hop est revalidé anti-SSRF.
+ * Pas de timeout ni de limite de taille — le caller les gère.
+ */
+export async function fetchFollowingSafeRedirects(
+  rawUrl: string,
+  init?: Omit<RequestInit, "redirect">
+): Promise<Result<Response>> {
+  let currentUrl = rawUrl;
+  let response: Response | undefined;
+
+  for (let hop = 0; hop <= MAX_SAFE_REDIRECTS; hop++) {
+    const hopSafe = await assertSafeUrl(currentUrl);
+    if (!hopSafe.ok) return hopSafe;
+    currentUrl = hopSafe.data.toString();
+
+    try {
+      response = await fetch(currentUrl, {
+        ...init,
+        redirect: "manual",
+        headers: {
+          "User-Agent": DEFAULT_USER_AGENT,
+          Accept: "*/*",
+          ...(init?.headers ?? {}),
+        },
+      });
+    } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") {
+        return err("Délai dépassé lors de la requête", "TIMEOUT");
+      }
+      return err("Impossible de joindre l'URL", "FETCH_FAILED");
+    }
+
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get("location");
+      if (!location) {
+        return err("Redirection HTTP invalide", "REDIRECT_ERROR");
+      }
+      if (hop === MAX_SAFE_REDIRECTS) {
+        return err("Trop de redirections HTTP", "TOO_MANY_REDIRECTS");
+      }
+      currentUrl = new URL(location, currentUrl).toString();
+      continue;
+    }
+
+    break;
+  }
+
+  if (!response) {
+    return err("Échec de la requête réseau", "FETCH_FAILED");
+  }
+
+  return ok(response);
+}
 
 /**
  * Fetch sécurisé : anti-SSRF, timeout, limite de taille, max 5 redirections.
@@ -118,51 +177,17 @@ export async function safeFetch(
   rawUrl: string,
   init?: RequestInit
 ): Promise<Result<Response>> {
-  const safe = await assertSafeUrl(rawUrl);
-  if (!safe.ok) return safe;
-
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
   try {
-    let currentUrl = safe.data.toString();
-    let response: Response | undefined;
-    const maxRedirects = 5;
+    const fetched = await fetchFollowingSafeRedirects(rawUrl, {
+      ...init,
+      signal: controller.signal,
+    });
+    if (!fetched.ok) return fetched;
 
-    for (let hop = 0; hop <= maxRedirects; hop++) {
-      const hopSafe = await assertSafeUrl(currentUrl);
-      if (!hopSafe.ok) return hopSafe;
-
-      response = await fetch(currentUrl, {
-        ...init,
-        redirect: "manual",
-        signal: controller.signal,
-        headers: {
-          "User-Agent": "LuniiPackBuilder/0.1 (+https://github.com/pmmach/lunii-pack-builder)",
-          Accept: "*/*",
-          ...(init?.headers ?? {}),
-        },
-      });
-
-      if (response.status >= 300 && response.status < 400) {
-        const location = response.headers.get("location");
-        if (!location) {
-          return err("Redirection HTTP invalide", "REDIRECT_ERROR");
-        }
-        if (hop === maxRedirects) {
-          return err("Trop de redirections HTTP", "TOO_MANY_REDIRECTS");
-        }
-        currentUrl = new URL(location, currentUrl).toString();
-        continue;
-      }
-
-      break;
-    }
-
-    if (!response) {
-      return err("Échec de la requête réseau", "FETCH_FAILED");
-    }
-
+    const response = fetched.data;
     if (!response.ok) {
       return err(
         `Le serveur distant a répondu ${response.status}`,
@@ -170,18 +195,12 @@ export async function safeFetch(
       );
     }
 
-    // Wrap body to enforce size limit when consumed
     const contentLength = response.headers.get("content-length");
     if (contentLength && Number(contentLength) > MAX_RESPONSE_BYTES) {
       return err("Réponse trop volumineuse", "RESPONSE_TOO_LARGE");
     }
 
     return ok(response);
-  } catch (e) {
-    if (e instanceof Error && e.name === "AbortError") {
-      return err("Délai dépassé lors de la requête", "TIMEOUT");
-    }
-    return err("Impossible de joindre l'URL", "FETCH_FAILED");
   } finally {
     clearTimeout(timeout);
   }

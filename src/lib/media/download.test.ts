@@ -5,12 +5,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { downloadToWorkspace } from "./download";
 import { setDnsLookupForTests } from "@/lib/sources/url-guard";
 
+const PUBLIC_DNS = (async () => [
+  { address: "93.184.216.34", family: 4 },
+]) as never;
+
 let tmpDir: string;
 
 beforeEach(() => {
-  setDnsLookupForTests(
-    (async () => [{ address: "93.184.216.34", family: 4 }]) as never
-  );
+  setDnsLookupForTests(PUBLIC_DNS);
 });
 
 afterEach(async () => {
@@ -116,5 +118,44 @@ describe("downloadToWorkspace", () => {
     );
     expect(result.ok).toBe(true);
     expect(ratios.at(-1)).toBe(1);
+  });
+
+  it("bloque une redirection vers une IP privée", async () => {
+    tmpDir = await mkdtemp(path.join(os.tmpdir(), "lunii-dl-"));
+    const dest = path.join(tmpDir, "ssrf.mp3");
+
+    setDnsLookupForTests(
+      (async (hostname) => {
+        if (hostname === "evil.example") {
+          return [{ address: "93.184.216.34", family: 4 }];
+        }
+        return [{ address: "10.0.0.5", family: 4 }];
+      }) as never
+    );
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("evil.example")) {
+          return new Response(null, {
+            status: 302,
+            headers: { location: "http://169.254.169.254/latest/meta-data" },
+          });
+        }
+        return new Response("secret", {
+          status: 200,
+          headers: { "content-type": "audio/mpeg" },
+        });
+      })
+    );
+
+    const result = await downloadToWorkspace(
+      "https://evil.example/audio.mp3",
+      dest,
+      "audio"
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe("SSRF_BLOCKED");
   });
 });

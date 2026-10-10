@@ -4,6 +4,10 @@ import path from "node:path";
 import { recordUsage } from "@/lib/stats/usage";
 import { getClientIp } from "@/lib/shared/client-ip";
 import { env } from "@/lib/shared/env";
+import {
+  isValidSessionId,
+  sessionWorkspaceRoot,
+} from "@/lib/shared/session-id";
 
 export async function GET(
   _req: Request,
@@ -11,17 +15,11 @@ export async function GET(
 ): Promise<Response> {
   const { sessionId } = await params;
 
-  // Empêcher path traversal
-  if (
-    !sessionId ||
-    sessionId.includes("..") ||
-    sessionId.includes("/") ||
-    sessionId.includes("\\")
-  ) {
+  if (!isValidSessionId(sessionId)) {
     return new Response("Not found", { status: 404 });
   }
 
-  const workspaceDir = path.join(process.cwd(), "workspace", sessionId);
+  const workspaceDir = sessionWorkspaceRoot(sessionId);
   const zipPath = path.join(workspaceDir, "export.zip");
   const metaPath = path.join(workspaceDir, "export-meta.json");
 

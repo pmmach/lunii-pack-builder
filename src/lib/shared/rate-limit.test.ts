@@ -49,4 +49,14 @@ describe("checkRateLimit", () => {
     expect(checkRateLimit("7.7.7.7", "tts").ok).toBe(false);
     expect(checkRateLimit("7.7.7.7", "export").ok).toBe(true);
   });
+
+  it("isole le bucket prepare", () => {
+    const t = 1_000_000;
+    setRateLimitNowForTests(() => t);
+    for (let i = 0; i < 10; i++) {
+      expect(checkRateLimit("6.6.6.6", "prepare").ok).toBe(true);
+    }
+    expect(checkRateLimit("6.6.6.6", "prepare").ok).toBe(false);
+    expect(checkRateLimit("6.6.6.6", "resolve").ok).toBe(true);
+  });
 });

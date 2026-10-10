@@ -171,7 +171,7 @@ export function StatsDashboard({ report }: { report: UsageReport }) {
   const bucket = report.rateLimitedByBucket;
   const rateDetail =
     report.semester.rateLimited > 0
-      ? `Résolution ${formatCount(bucket.resolve)} · export ${formatCount(bucket.export)} · voix ${formatCount(bucket.tts)}`
+      ? `Résolution ${formatCount(bucket.resolve)} · export ${formatCount(bucket.export)} · voix ${formatCount(bucket.tts)} · média ${formatCount(bucket.prepare)}`
       : undefined;
   const storyDetail =
     report.semester.exports > 0

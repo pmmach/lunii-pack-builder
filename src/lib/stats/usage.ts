@@ -23,7 +23,7 @@ const EVENT_TYPES = [
 
 export type UsageEventType = (typeof EVENT_TYPES)[number];
 
-export type UsageBucket = "resolve" | "export" | "tts";
+export type UsageBucket = "resolve" | "export" | "tts" | "prepare";
 
 export interface UsageEvent {
   t: string;
@@ -215,7 +215,12 @@ function sanitizeStories(stories: number | undefined): number | undefined {
 }
 
 function sanitizeBucket(bucket: string | undefined): UsageBucket | undefined {
-  if (bucket === "resolve" || bucket === "export" || bucket === "tts") {
+  if (
+    bucket === "resolve" ||
+    bucket === "export" ||
+    bucket === "tts" ||
+    bucket === "prepare"
+  ) {
     return bucket;
   }
   return undefined;
@@ -457,6 +462,7 @@ export function aggregateUsage(events: UsageEvent[], now: Date): UsageReport {
     resolve: 0,
     export: 0,
     tts: 0,
+    prepare: 0,
   };
   const daysSeen = new Map<string, Set<string>>();
 

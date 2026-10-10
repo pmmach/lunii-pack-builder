@@ -1,4 +1,8 @@
 import { existsSync } from "node:fs";
+import {
+  isPathInsideSessionWorkspace,
+  isValidSessionId,
+} from "@/lib/shared/session-id";
 import { err, ok, type Result } from "@/lib/shared/result";
 import type { PackDraft } from "./types";
 
@@ -9,7 +13,24 @@ export {
   reorderStories,
 } from "./model";
 
+function assertSessionPath(
+  filePath: string,
+  sessionId: string,
+  label: string
+): Result<true> {
+  if (!isPathInsideSessionWorkspace(filePath, sessionId)) {
+    return err(`${label} hors de la session`, "INVALID_PACK");
+  }
+  if (!existsSync(filePath)) {
+    return err(`${label} manquant`, "INVALID_PACK");
+  }
+  return ok(true);
+}
+
 export function validatePackDraft(pack: PackDraft): Result<true> {
+  if (!isValidSessionId(pack.sessionId)) {
+    return err("Session invalide", "INVALID_SESSION");
+  }
   if (!pack.title.trim()) {
     return err("Le titre du pack est obligatoire", "INVALID_PACK");
   }
@@ -23,27 +44,42 @@ export function validatePackDraft(pack: PackDraft): Result<true> {
     if (!story.title.trim()) {
       return err("Chaque histoire doit avoir un titre", "INVALID_PACK");
     }
-    if (!existsSync(story.storyAudioPath)) {
-      return err(
-        `Fichier audio manquant pour « ${story.title} »`,
-        "INVALID_PACK"
+    const audio = assertSessionPath(
+      story.storyAudioPath,
+      pack.sessionId,
+      `Fichier audio pour « ${story.title} »`
+    );
+    if (!audio.ok) return audio;
+    const cover = assertSessionPath(
+      story.coverImagePath,
+      pack.sessionId,
+      `Image de couverture pour « ${story.title} »`
+    );
+    if (!cover.ok) return cover;
+    if (story.titleAudioPath) {
+      const intro = assertSessionPath(
+        story.titleAudioPath,
+        pack.sessionId,
+        `Fichier d'intro pour « ${story.title} »`
       );
-    }
-    if (!existsSync(story.coverImagePath)) {
-      return err(
-        `Image de couverture manquante pour « ${story.title} »`,
-        "INVALID_PACK"
-      );
-    }
-    if (story.titleAudioPath && !existsSync(story.titleAudioPath)) {
-      return err(
-        `Fichier d'intro manquant pour « ${story.title} »`,
-        "INVALID_PACK"
-      );
+      if (!intro.ok) return intro;
     }
   }
-  if (pack.coverImagePath && !existsSync(pack.coverImagePath)) {
-    return err("Image de couverture du pack manquante", "INVALID_PACK");
+  if (pack.coverImagePath) {
+    const packCover = assertSessionPath(
+      pack.coverImagePath,
+      pack.sessionId,
+      "Image de couverture du pack"
+    );
+    if (!packCover.ok) return packCover;
+  }
+  if (pack.titleAudioPath) {
+    const packIntro = assertSessionPath(
+      pack.titleAudioPath,
+      pack.sessionId,
+      "Intro audio du pack"
+    );
+    if (!packIntro.ok) return packIntro;
   }
   return ok(true);
 }

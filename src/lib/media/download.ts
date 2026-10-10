@@ -6,7 +6,7 @@ import { pipeline } from "node:stream/promises";
 import { debugMedia, safeHost } from "@/lib/shared/debug-media";
 import { env } from "@/lib/shared/env";
 import { err, ok, type Result } from "@/lib/shared/result";
-import { assertSafeUrl } from "@/lib/sources/url-guard";
+import { fetchFollowingSafeRedirects } from "@/lib/sources/url-guard";
 import type { DownloadResult } from "./types";
 
 /** Timeout images : plus court (fichiers petits). Audio : env.DOWNLOAD_TIMEOUT_MS. */
@@ -27,10 +27,7 @@ export async function downloadToWorkspace(
   kind: "audio" | "image",
   onProgress?: (ratio: number) => void
 ): Promise<Result<DownloadResult>> {
-  const safe = await assertSafeUrl(url);
-  if (!safe.ok) return safe;
-
-  const host = safeHost(safe.data.toString());
+  const host = safeHost(url);
   const timeoutMs =
     kind === "audio" ? env.DOWNLOAD_TIMEOUT_MS : IMAGE_DOWNLOAD_TIMEOUT_MS;
   const t0 = Date.now();
@@ -44,16 +41,21 @@ export async function downloadToWorkspace(
   };
 
   try {
-    const response = await fetch(safe.data.toString(), {
+    const fetched = await fetchFollowingSafeRedirects(url, {
       signal: controller.signal,
-      redirect: "follow",
       cache: "no-store",
-      headers: {
-        "User-Agent":
-          "LuniiPackBuilder/0.1 (+https://github.com/pmmach/lunii-pack-builder)",
-      },
     });
+    if (!fetched.ok) {
+      debugMedia("download:blocked", {
+        kind,
+        host,
+        code: fetched.code,
+        ms: Date.now() - t0,
+      });
+      return fetched;
+    }
 
+    const response = fetched.data;
     if (!response.ok) {
       debugMedia("download:http-error", {
         kind,

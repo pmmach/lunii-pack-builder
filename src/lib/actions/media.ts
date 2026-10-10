@@ -14,17 +14,20 @@ import { downloadToWorkspace } from "@/lib/media/download";
 import { ensureMp3, trimAudio } from "@/lib/media/trim";
 import type { TrimOptions } from "@/lib/media/types";
 import { generateWaveformPeaks } from "@/lib/media/waveform";
+import { getClientIp } from "@/lib/shared/client-ip";
 import { debugMedia } from "@/lib/shared/debug-media";
 import { env } from "@/lib/shared/env";
+import { checkRateLimit } from "@/lib/shared/rate-limit";
 import { err, ok, type Result } from "@/lib/shared/result";
+import {
+  isValidSessionId,
+  sessionWorkspaceRoot,
+} from "@/lib/shared/session-id";
 import { slugify } from "@/lib/shared/slugify";
+import { recordUsage } from "@/lib/stats/usage";
 import type { EpisodeMeta } from "@/lib/sources/types";
 
 const SOURCE_MP3_NAME = "source.mp3";
-
-function workspaceRoot(sessionId: string): string {
-  return path.join(process.cwd(), "workspace", sessionId);
-}
 
 function extensionFromUrl(url: string, fallback: string): string {
   try {
@@ -51,6 +54,17 @@ export async function prepareEpisodeAction(
   sessionId: string,
   episode: EpisodeMeta
 ): Promise<Result<{ jobId: string }>> {
+  if (!isValidSessionId(sessionId)) {
+    return err("Session invalide", "INVALID_SESSION");
+  }
+
+  const ip = await getClientIp();
+  const limited = checkRateLimit(ip, "prepare");
+  if (!limited.ok) {
+    recordUsage({ type: "rate_limited", visitorIp: ip, bucket: "prepare" });
+    return limited;
+  }
+
   if (
     episode.durationSeconds !== undefined &&
     episode.durationSeconds > env.MAX_EPISODE_DURATION_SECONDS
@@ -89,12 +103,12 @@ export async function prepareEpisodeAction(
     const t0 = Date.now();
     try {
       const sourceDir = path.join(
-        workspaceRoot(sessionId),
+        sessionWorkspaceRoot(sessionId),
         "source",
         safeEpisodeId
       );
       const processedDir = path.join(
-        workspaceRoot(sessionId),
+        sessionWorkspaceRoot(sessionId),
         "processed",
         safeEpisodeId
       );
@@ -269,6 +283,17 @@ export async function trimEpisodeAction(
   episodeId: string,
   opts: TrimOptions
 ): Promise<Result<{ jobId: string }>> {
+  if (!isValidSessionId(sessionId)) {
+    return err("Session invalide", "INVALID_SESSION");
+  }
+
+  const ip = await getClientIp();
+  const limited = checkRateLimit(ip, "prepare");
+  if (!limited.ok) {
+    recordUsage({ type: "rate_limited", visitorIp: ip, bucket: "prepare" });
+    return limited;
+  }
+
   const safeEpisodeId = slugify(episodeId) || "episode";
   const label = `trim:${safeEpisodeId}`;
   const jobId = createJob();
@@ -294,12 +319,12 @@ export async function trimEpisodeAction(
       });
 
       const sourceDir = path.join(
-        workspaceRoot(sessionId),
+        sessionWorkspaceRoot(sessionId),
         "source",
         safeEpisodeId
       );
       const processedDir = path.join(
-        workspaceRoot(sessionId),
+        sessionWorkspaceRoot(sessionId),
         "processed",
         safeEpisodeId
       );
@@ -399,14 +424,18 @@ export async function cropEpisodeCoverAction(
   episodeId: string,
   focus?: { x: number; y: number }
 ): Promise<Result<{ path: string }>> {
+  if (!isValidSessionId(sessionId)) {
+    return err("Session invalide", "INVALID_SESSION");
+  }
+
   const safeEpisodeId = slugify(episodeId) || "episode";
   const sourceDir = path.join(
-    workspaceRoot(sessionId),
+    sessionWorkspaceRoot(sessionId),
     "source",
     safeEpisodeId
   );
   const processedDir = path.join(
-    workspaceRoot(sessionId),
+    sessionWorkspaceRoot(sessionId),
     "processed",
     safeEpisodeId
   );
@@ -444,15 +473,6 @@ function coverExtFromMime(mime: string): string | undefined {
   return undefined;
 }
 
-function isValidSessionId(sessionId: string): boolean {
-  return (
-    sessionId.length > 0 &&
-    !sessionId.includes("..") &&
-    !sessionId.includes("/") &&
-    !sessionId.includes("\\")
-  );
-}
-
 export async function uploadPackCoverAction(
   sessionId: string,
   formData: FormData
@@ -484,7 +504,7 @@ export async function uploadPackCoverAction(
   }
 
   return withConcurrencyLimit(async () => {
-    const coverDir = path.join(workspaceRoot(sessionId), "pack-cover");
+    const coverDir = path.join(sessionWorkspaceRoot(sessionId), "pack-cover");
     await mkdir(coverDir, { recursive: true });
     const srcPath = path.join(coverDir, `upload-src${ext}`);
     const outputPath = path.join(coverDir, "upload.jpg");

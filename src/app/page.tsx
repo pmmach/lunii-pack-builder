@@ -187,7 +187,10 @@ export default function HomePage() {
         </section>
 
         <footer className="text-muted-foreground space-y-1 text-center text-xs">
-          <p>Usage personnel — respecte les droits des créateurs</p>
+          <p>
+            Usage personnel, indépendant de Lunii — l&apos;audio reste aux
+            ayants droit.
+          </p>
           <p>
             Ensuite :{" "}
             <Link

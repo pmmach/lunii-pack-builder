@@ -8,6 +8,10 @@ import { recordUsage } from "@/lib/stats/usage";
 import { getClientIp } from "@/lib/shared/client-ip";
 import { checkRateLimit } from "@/lib/shared/rate-limit";
 import { err, ok, type Result } from "@/lib/shared/result";
+import {
+  isValidSessionId,
+  sessionWorkspaceRoot,
+} from "@/lib/shared/session-id";
 
 export async function exportPackAction(
   pack: PackDraft
@@ -19,7 +23,7 @@ export async function exportPackAction(
     return limited;
   }
 
-  if (!pack.sessionId) {
+  if (!isValidSessionId(pack.sessionId)) {
     recordUsage({
       type: "export",
       visitorIp: ip,
@@ -29,7 +33,7 @@ export async function exportPackAction(
     return err("Session invalide", "INVALID_SESSION");
   }
 
-  const workspaceDir = path.join(process.cwd(), "workspace", pack.sessionId);
+  const workspaceDir = sessionWorkspaceRoot(pack.sessionId);
   const packDest = path.join(workspaceDir, "pack");
   const zipPath = path.join(workspaceDir, "export.zip");
 

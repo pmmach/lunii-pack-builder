@@ -49,7 +49,7 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-sans", weight: ["400
   - Succès → redirection vers `/pack/[sessionId]` (le `sessionId` est généré côté serveur dans l'action et retourné)
   - Erreur → `Alert` (variant destructive) avec le message d'erreur retourné (jamais de stack trace), le formulaire reste rempli
 - Bloc "Comment ça marche" : 3 mini-cartes iconographiées (Lien → Découpe → Export), texte court
-- Pied de page : mention discrète "Usage personnel — respecte les droits des créateurs" (cf. `requirements/03-contraintes-legales-et-risques.md`), lien vers [Lunii Admin Web](https://lunii-admin-web.pages.dev/)
+- Pied de page : mention discrète "Usage personnel, indépendant de Lunii — l'audio reste aux ayants droit." (cf. `requirements/03-contraintes-legales-et-risques.md`), lien vers [Lunii Admin Web](https://lunii-admin-web.pages.dev/). Pas de signature nominative.
 
 ## Étape 2 — Sélection des épisodes
 

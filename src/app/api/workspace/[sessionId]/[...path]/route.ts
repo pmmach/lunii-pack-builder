@@ -1,6 +1,11 @@
 import { createReadStream } from "node:fs";
 import { access, stat } from "node:fs/promises";
 import path from "node:path";
+import {
+  isPathInsideDir,
+  isValidSessionId,
+  sessionWorkspaceRoot,
+} from "@/lib/shared/session-id";
 
 export async function GET(
   _req: Request,
@@ -10,16 +15,15 @@ export async function GET(
 ): Promise<Response> {
   const { sessionId, path: parts } = await params;
   if (
-    !sessionId ||
-    sessionId.includes("..") ||
-    parts.some((p) => p.includes(".."))
+    !isValidSessionId(sessionId) ||
+    parts.some((p) => p.includes("..") || p.includes("/") || p.includes("\\"))
   ) {
     return new Response("Not found", { status: 404 });
   }
 
-  const filePath = path.join(process.cwd(), "workspace", sessionId, ...parts);
-  const root = path.join(process.cwd(), "workspace", sessionId);
-  if (!filePath.startsWith(root)) {
+  const root = sessionWorkspaceRoot(sessionId);
+  const filePath = path.resolve(root, ...parts);
+  if (!isPathInsideDir(root, filePath)) {
     return new Response("Not found", { status: 404 });
   }
 
